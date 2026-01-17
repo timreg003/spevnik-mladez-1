@@ -1,6 +1,7 @@
 let songs = [];
 let currentSong = null;
 let transposeStep = 0;
+let fontSize = 17; // základná veľkosť písma
 
 function parseXML() {
   fetch('export.zpk.xml')
@@ -22,7 +23,9 @@ function displayList(list) {
   listDiv.innerHTML = '';
   list.forEach(song => {
     const div = document.createElement('div');
-    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
+    // ak je názov číslo – daj ♪ pred + bude na konci
+    const isNumber = /^\d+(\.\d+)?$/.test(song.title);
+    div.innerHTML = `<i class="fas fa-music"></i> ${isNumber ? `♪ ${song.title}` : song.title}`;
     div.onclick = () => showSong(song);
     listDiv.appendChild(div);
   });
@@ -62,6 +65,20 @@ function transposeSong(direction) {
   renderSong(currentSong.text);
 }
 
+function changeFontSize(delta) {
+  fontSize = Math.max(12, Math.min(28, fontSize + delta));
+  document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  localStorage.setItem('fontSize', fontSize);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('fontSize');
+  if (saved) {
+    fontSize = parseInt(saved);
+    document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  }
+});
+
 function backToList() {
   document.getElementById('song-list').style.display = 'block';
   document.getElementById('song-display').style.display = 'none';
@@ -69,8 +86,4 @@ function backToList() {
 
 document.getElementById('search').addEventListener('input', e => {
   const query = e.target.value.toLowerCase();
-  const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
-  displayList(filtered);
-});
-
-parseXML();
+  const
