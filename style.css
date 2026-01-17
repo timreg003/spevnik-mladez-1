@@ -40,22 +40,40 @@ h2 {
   margin-bottom: 20px;
 }
 
-#playlist-creator {
+#public-playlist-section {
   background: #1e1e1e;
   padding: 14px;
-  border-radius: 8px;
   margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  border-radius: 8px;
 }
 
-#playlist-creator input {
+#public-playlist-section button {
   background: #2a2a2a;
   border: none;
   color: #fff;
-  padding: 10px;
+  padding: 8px 12px;
   border-radius: 6px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+#public-playlist-section button:hover {
+  background: #3a3a3a;
+}
+
+#public-playlist-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+}
+
+#public-playlist-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+#playlist-creator {
+  margin-bottom: 20px;
 }
 
 #playlist-creator button {
@@ -72,77 +90,22 @@ h2 {
   background: #ffffff;
 }
 
-#playlist-section {
-  background: #1e1e1e;
-  padding: 14px;
+.nav-bar {
+  display: flex;
+  justify-content: space-between;
   margin-bottom: 20px;
-  border-radius: 8px;
 }
 
-#playlist-section button {
-  background: #2a2a2a;
+.nav-bar button {
+  background: #1e1e1e;
   border: none;
   color: #fff;
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
-  margin-right: 10px;
 }
 
-#playlist-section button:hover {
-  background: #3a3a3a;
-}
-
-#playlist-list {
-  list-style: none;
-  padding: 0;
-  margin: 10px 0 0 0;
-}
-
-#playlist-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-#playlist-list li:last-child {
-  border-bottom: none;
-}
-
-.drag-handle {
-  cursor: grab;
-  margin-right: 10px;
-  color: #aaa;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-.remove-song {
-  background: none;
-  border: none;
-  color: #ff4d4d;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.remove-song:hover {
-  color: #ff1a1a;
-}
-
-#song-list div {
-  background: #1e1e1e;
-  padding: 14px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-#song-list div:hover {
+.nav-bar button:hover {
   background: #2a2a2a;
 }
 
