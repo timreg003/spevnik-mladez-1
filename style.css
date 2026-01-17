@@ -1,38 +1,89 @@
 body {
-  font-family: Arial, sans-serif;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: #121212;
+  color: #e0e0e0;
   padding: 20px;
-  background: #f9f9f9;
+}
+
+.container {
+  max-width: 700px;
+  margin: auto;
+}
+
+h1 {
+  font-size: 2em;
+  margin-bottom: 20px;
+  color: #ffffff;
 }
 
 #search {
   width: 100%;
-  max-width: 400px;
-  padding: 10px;
-  margin-bottom: 20px;
+  padding: 12px;
   font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  background: #1e1e1e;
+  color: #fff;
+  margin-bottom: 20px;
 }
 
 #song-list div {
+  background: #1e1e1e;
+  padding: 14px;
+  margin-bottom: 10px;
+  border-radius: 8px;
   cursor: pointer;
-  padding: 8px;
-  border-bottom: 1px solid #ccc;
+  transition: background 0.2s;
 }
 
 #song-list div:hover {
-  background: #eee;
+  background: #2a2a2a;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 16px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.back-btn:hover {
+  color: #fff;
+}
+
+.transpose-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.transpose-bar button {
+  background: #1e1e1e;
+  border: none;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.transpose-bar span {
+  color: #aaa;
 }
 
 pre {
   white-space: pre-wrap;
   font-family: inherit;
-  font-size: 16px;
-  color: #000;
-  line-height: 1.6;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 .chord {
-  color: blue;
-  font-weight: bold;
+  color: #00bfff;
+  font-weight: 600;
   position: relative;
   top: -0.3em;
   font-size: 0.95em;
