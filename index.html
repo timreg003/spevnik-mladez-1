@@ -15,10 +15,17 @@
   <div class="container">
     <h1><i class="fas fa-music"></i> Mládežnícky spevník NIŽNÁ</h1>
 
+    <!-- Vytvorenie playlistu -->
+    <div id="playlist-creator" style="margin-bottom: 20px;">
+      <input type="text" id="playlist-name" placeholder="Názov playlistu (napr. nedeľa-29-6)" />
+      <button onclick="createPlaylist()"><i class="fas fa-plus"></i> Vytvoriť playlist</button>
+    </div>
+
     <!-- Playlist na 144 hodín -->
     <div id="playlist-section" style="display:none;">
-      <h2>Dnešný playlist (144 h)</h2>
+      <h2 id="playlist-title-h2">Playlist (144 h)</h2>
       <button onclick="removePlaylist()"><i class="fas fa-trash"></i> Odstrániť playlist</button>
+      <button onclick="renamePlaylist()"><i class="fas fa-edit"></i> Premenovať</button>
       <ul id="playlist-list"></ul>
     </div>
 
