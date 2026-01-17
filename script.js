@@ -10,10 +10,20 @@ function parseXML() {
       const parser = new DOMParser();
       const xml = parser.parseFromString(xmlText, 'application/xml');
       const songNodes = xml.querySelectorAll('song');
-      songs = Array.from(songNodes).map(song => ({
+      const all = Array.from(songNodes).map(song => ({
         title: song.querySelector('title').textContent.trim(),
         text: song.querySelector('songtext').textContent.trim()
-      })).sort((a, b) => a.title.localeCompare(b.title, 'sk'));
+      }));
+
+      // rozdelíme na textové a číselné
+      const text = all.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
+      const num  = all.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
+
+      // zoradíme: A–Z, potom čísla 0–9
+      text.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
+      num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
+
+      songs = [...text, ...num];
       displayList(songs);
     });
 }
@@ -23,8 +33,9 @@ function displayList(list) {
   listDiv.innerHTML = '';
   list.forEach(song => {
     const div = document.createElement('div');
+    // číselné bez symbolu – aby boli úplne na konci
     const isNumber = /^\d+(\.\d+)?$/.test(song.title);
-    div.innerHTML = `<i class="fas fa-music"></i> ${isNumber ? `♪ ${song.title}` : song.title}`;
+    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
     div.onclick = () => showSong(song);
     listDiv.appendChild(div);
   });
