@@ -10,6 +10,7 @@ const PLAYLIST_DURATION = 144 * 60 * 60 * 1000; // 144 hodín v ms
 function loadPlaylist() {
   const saved = localStorage.getItem('playlist');
   const savedTime = localStorage.getItem('playlistTime');
+  const savedName = localStorage.getItem('playlistName');
   const now = Date.now();
 
   if (saved && savedTime) {
@@ -18,14 +19,16 @@ function loadPlaylist() {
       playlist = JSON.parse(saved);
       renderPlaylist();
       document.getElementById('playlist-section').style.display = 'block';
+      document.getElementById('playlist-creator').style.display = 'none';
       return;
     } else {
-      // vypršalo – vymažeme
       localStorage.removeItem('playlist');
       localStorage.removeItem('playlistTime');
+      localStorage.removeItem('playlistName');
     }
   }
   document.getElementById('playlist-section').style.display = 'none';
+  document.getElementById('playlist-creator').style.display = 'block';
 }
 
 function savePlaylist() {
@@ -36,6 +39,9 @@ function savePlaylist() {
 function renderPlaylist() {
   const list = document.getElementById('playlist-list');
   list.innerHTML = '';
+  const name = localStorage.getItem('playlistName') || 'Playlist';
+  document.getElementById('playlist-title-h2').textContent = name + ' (144 h)';
+
   playlist.forEach((item, index) => {
     const li = document.createElement('li');
     li.draggable = true;
@@ -60,6 +66,7 @@ function removeSongFromPlaylist(index) {
   renderPlaylist();
   if (playlist.length === 0) {
     document.getElementById('playlist-section').style.display = 'none';
+    document.getElementById('playlist-creator').style.display = 'block';
   }
 }
 
@@ -67,9 +74,42 @@ function removePlaylist() {
   if (confirm('Odstrániť celý playlist?')) {
     playlist = [];
     localStorage.removeItem('playlist');
+    localStorage.removeItem('playlistName');
     localStorage.removeItem('playlistTime');
     document.getElementById('playlist-section').style.display = 'none';
+    document.getElementById('playlist-creator').style.display = 'block';
   }
+}
+
+function renamePlaylist() {
+  const newName = prompt('Nový názov playlistu:', localStorage.getItem('playlistName') || '');
+  if (newName && newName.trim()) {
+    localStorage.setItem('playlistName', newName.trim());
+    document.getElementById('playlist-title-h2').textContent = newName.trim() + ' (144 h)';
+  }
+}
+
+// === VYTVORENIE PLAYLISTU S NÁZVOM ===
+function createPlaylist() {
+  const nameInput = document.getElementById('playlist-name');
+  const name = nameInput.value.trim();
+  if (!name) { alert('Zadaj názov playlistu'); return; }
+
+  const selected = [];
+  document.querySelectorAll('#song-list input[type="checkbox"]:checked').forEach(cb => {
+    selected.push({ title: cb.value });
+  });
+  if (selected.length === 0) { alert('Vyber aspoň jednu pieseň'); return; }
+
+  playlist = selected;
+  localStorage.setItem('playlist', JSON.stringify(playlist));
+  localStorage.setItem('playlistName', name);
+  localStorage.setItem('playlistTime', Date.now().toString());
+
+  renderPlaylist();
+  document.getElementById('playlist-creator').style.display = 'none';
+  document.getElementById('playlist-section').style.display = 'block';
+  alert('Playlist vytvorený!');
 }
 
 // === DRAG & DROP PRE ZMENENIE PORADIA ===
@@ -115,8 +155,7 @@ function parseXML() {
 
       renderSongList(songs);
       loadPlaylist();
-      renderPlaylist();
-      addPlaylistCreator();
+      addCheckboxesToList();
     });
 }
 
@@ -125,8 +164,23 @@ function renderSongList(list) {
   listDiv.innerHTML = '';
   list.forEach(song => {
     const div = document.createElement('div');
-    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
-    div.onclick = () => showSong(song);
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.gap = '10px';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.value = song.title;
+    chk.style.marginRight = '8px';
+
+    const label = document.createElement('span');
+    label.textContent = song.title;
+    label.style.flex = '1';
+    label.style.cursor = 'pointer';
+    label.onclick = () => showSong(song);
+
+    div.appendChild(chk);
+    div.appendChild(label);
     listDiv.appendChild(div);
   });
 }
