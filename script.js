@@ -12,7 +12,7 @@ function parseXML() {
       songs = Array.from(songNodes).map(song => ({
         title: song.querySelector('title').textContent.trim(),
         text: song.querySelector('songtext').textContent.trim()
-      }));
+      })).sort((a, b) => a.title.localeCompare(b.title, 'sk'));
       displayList(songs);
     });
 }
@@ -22,7 +22,7 @@ function displayList(list) {
   listDiv.innerHTML = '';
   list.forEach(song => {
     const div = document.createElement('div');
-    div.textContent = song.title;
+    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
     div.onclick = () => showSong(song);
     listDiv.appendChild(div);
   });
