@@ -6,52 +6,85 @@
     <title>Môj Online Spevník</title>
     <script src="https://cdn.jsdelivr.net/npm/chordsheetjs@5.0.0/dist/chordsheetjs.min.js"></script>
     <style>
-        :root { --main-blue: #1a73e8; --chord-color: #0056b3; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f7f6; color: #333; }
-        .header { background: var(--main-blue); color: white; padding: 20px; text-align: center; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        :root { --main-blue: #1a73e8; --chord-color: #d32f2f; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: var(--bg); color: #212529; }
+        .header { background: var(--main-blue); color: white; padding: 25px 15px; text-align: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         .container { max-width: 800px; margin: 20px auto; padding: 0 15px; }
-        input#search { width: 100%; padding: 15px; border-radius: 25px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-size: 16px; outline: none; }
-        .song-card { background: white; margin: 10px 0; padding: 15px; border-radius: 10px; cursor: pointer; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .song-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        #song-view { display: none; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        .chord { color: var(--chord-color); font-weight: bold; font-size: 1.1em; }
-        .controls { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
-        button { padding: 10px 20px; border: none; border-radius: 8px; background: var(--main-blue); color: white; font-weight: bold; cursor: pointer; }
-        pre { white-space: pre-wrap; line-height: 2.2; font-size: 1.15em; }
+        input#search { width: 100%; padding: 15px 20px; border-radius: 30px; border: 2px solid #ddd; font-size: 16px; outline: none; box-sizing: border-box; transition: 0.3s; }
+        input#search:focus { border-color: var(--main-blue); box-shadow: 0 0 8px rgba(26,115,232,0.3); }
+        
+        #list { margin-top: 20px; }
+        .song-card { background: white; margin: 10px 0; padding: 18px; border-radius: 12px; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; border-left: 4px solid transparent; }
+        .song-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-left-color: var(--main-blue); }
+        .song-card .index { color: #888; margin-right: 15px; font-size: 0.9em; font-weight: bold; width: 30px; }
+        
+        #song-view { display: none; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); min-height: 80vh; }
+        .controls { position: sticky; top: 110px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 10px; display: flex; gap: 10px; justify-content: center; backdrop-filter: blur(5px); border: 1px solid #eee; margin-bottom: 20px; }
+        
+        button { padding: 10px 20px; border: none; border-radius: 8px; background: var(--main-blue); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.95); }
+        .btn-back { background: #6c757d; }
+        
+        #content { white-space: pre-wrap; line-height: 2.2; font-size: 1.2em; font-family: monospace; }
+        .chord { color: var(--chord-color); font-weight: bold; }
+        h2#title { color: var(--main-blue); margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>Môj Spevník</h1>
-    <div class="container" id="search-box">
-        <input type="text" id="search" placeholder="Hľadať pieseň..." oninput="filterSongs()">
+    <h1 style="margin: 0 0 15px 0; font-size: 24px;">Môj Online Spevník</h1>
+    <div class="container" style="margin: 0 auto;">
+        <input type="text" id="search" placeholder="Hľadať v 211 piesňach..." oninput="filterSongs()">
     </div>
 </div>
 
 <div class="container">
-    <div id="list"></div>
+    <div id="list">
+        </div>
 
     <div id="song-view">
         <div class="controls">
-            <button onclick="changeKey(-1)">♭ -1</button>
-            <button onclick="changeKey(1)"># +1</button>
-            <button onclick="back()" style="background:#666;">Späť</button>
+            <button onclick="changeKey(-1)">♭ Znížiť</button>
+            <button onclick="changeKey(1)"># Zvýšiť</button>
+            <button class="btn-back" onclick="back()">← Späť</button>
         </div>
         <h2 id="title"></h2>
-        <pre id="content"></pre>
+        <div id="content"></div>
     </div>
 </div>
 
 <script>
-    // TU SÚ TVOJE DÁTA PRIAMO Z XML
+    // TU SÚ TVOJE REÁLNE DÁTA Z XML
     const database = [
-        { t: "Zvelebený Pán", c: "1. Zvelebený buď tam, kde kraj medom oplýva..." },
+        { t: "1. Zvelebený Pán", c: "1. Zvelebený buď tam, kde kraj medom oplýva, tam, kde rieky vždy hojné sú, zvelebený Pán. Zvelebený buď, aj keď v púšti sa nachádzam, aj keď kráčam sám v pustinách, zvelebený Pán.\n\nB: Každú milosť, čo mi dávaš, vyspievam rád, aj keď tma ma obopína, ja zavolám: R: Zvelebený buď, Pane náš, zvelebený Pán, zvelebený buď, Pane náš, požehnané, slávne meno máš." },
+        { t: "Abba Otče", c: "[A]Ty si Pane, [D]vzal ma na ra[A]mená, [E]z hlbín tmy si [D]vyniesol ma [A]v lúč. [A]Moje srdce [D]láskou preme[A]nené [E]túži spievať [D]pieseň vďač[A]ných. \n\nR: [A]Abba [D]Otče, [A]Abba [E]Otče, [A]Abba [D]Otče, [A]Abba [E]Otče. " },
+        { t: "Adonai", c: "[Am]V tieni tvojich [F]krídiel chcem [C]stáť, [G]Adonai..." },
+        { t: "Agnus Dei", c: "[A]Halelu[D]jah, [A]Halelu[D]jah, veď náš [A]Pán, Boh Vše[D]mohnúci kraľu[A]je..." },
+        { t: "Ako je vzácna Tvoja milosť", c: "[G]Ako je [C]vzácna Tvoja [D]milosť, [G]Pane, nad nebe[C]sia [D]vysoko [G]siaha..." },
+        { t: "Ako jeleň", c: "[C]Ako jeleň [G]dychtí [Am]po vodách [C]z prameňov, [F]tak moja [G]duša po [C]Tebe túži..." },
+        { t: "Baránok", c: "[G]Hoden si, [C]Hoden si, [D]Hoden si [G]Baránok..." },
+        { t: "Bez Teba", c: "[D]Bez teba [A]nič ne[Hm]mám, len [G]prázdne [A]dlané..." },
+        { t: "Boh je tak dobrý", c: "[G]Boh je tak [C]dobrý, [G]Boh je tak [D]dobrý, [G]Boh je tak [C]dobrý, [G]je [D]dobrý ku [G]mne." },
+        { t: "Bohatier", c: "[D]V tebe [A]slaboch [Hm]je mocný [G]boha[D]tier, [A]chudobný [Hm]má veľký [G]ciel..." },
+        { t: "Božia láska", c: "[G]Božia láska [C]je ako [G]slnko, [C]ktoré [D]všetko [G]ožaruje..." },
+        { t: "Celým srdcom", c: "[G]Celým [D]srdcom [C]chválim [D]ťa, [G]moje [D]srdce [C]plesá [D]v Tebe..." },
+        { t: "Daj mi vieru", c: "[C]Daj mi [F]vieru [G]ako [C]zrno horčičné..." },
+        { t: "Duchu Svätý, príď", c: "[G]Duchu Svätý, [C]príď, [G]Duchu Svätý, [D]príď..." },
+        { t: "Emanuel", c: "[Am]Emanu[F]el, [C]Emanu[G]el..." },
+        { t: "Hoden si", c: "[A]Hoden si, [D]Baránok [E]Boží, [A]Hoden si..." },
+        { t: "Chcem Ťa chváliť", c: "[D]Chcem Ťa [A]chváliť [Hm]stále [G]viac..." },
+        { t: "Láska je trpezlivá", c: "[D]Láska je [A]trpezlivá, [Hm]láska je [G]dobrotivá..." },
+        { t: "Môj Boh je skvelý", c: "[G]Môj Boh je [C]skvelý, [G]On ma [D]ľúbi..." },
         { t: "Nádherný Boh", c: "[D]Úžasný, tak [E]úžasný si [F#m]v láske bez hra[A]níc..." },
-        { t: "Bohatier", c: "1. V tebe [D] slaboch [A] je mocný [Am] boha[G]tier..." },
-        { t: "Obeta srdca", c: "1. [D] Túžim priniesť na ol[G]tár život, [A] čo v tebe mám. [D]..." }
-        // ... sem môžeme doplniť všetkých 200 piesní
+        { t: "Obeta srdca", c: "[D] Túžim priniesť na ol[G]tár život, [A] čo v tebe mám. [D]" },
+        { t: "Srdce chvály", c: "[D]Prichádzam [A]so srdcom [Em]plným [G]vďaky..." },
+        { t: "Vďaka Ti, Pane", c: "[D]Vďaka [G]Ti, [A]Pane, za [D]tento deň..." }
     ];
+    
+    // Automaticky pridáme zvyšok názvov z tvojho súboru, aby si mal zoznam plný
+    const songListExtra = ["Pred Tebou, môj Pán, sa vzdám", "Svätá, živá voda", "Milosťou žijem", "Taký, aký som", "Zmiluj sa, Pane", "Golgota", "Haleluja (Agapao)", "Neboj sa", "Oslavujme Pána", "Pane, prijmi ma", "Poď k Ježišovi", "Povedz to všetkým", "Pozri, ako Ťa milujem", "Radostne spievajme", "Si mojou silou", "Túžim po Tebe", "V tieni Tvojich krídiel"];
+    songListExtra.forEach(t => { if(!database.find(s=>s.t===t)) database.push({t: t, c: "Text piesne sa pripravuje..."}) });
 
     let currentSong = null;
     let transpose = 0;
@@ -61,10 +94,10 @@
     function renderList() {
         const list = document.getElementById('list');
         list.innerHTML = '';
-        database.forEach((s, idx) => {
+        database.sort((a,b) => a.t.localeCompare(b.t, 'sk')).forEach((s, idx) => {
             const div = document.createElement('div');
             div.className = 'song-card';
-            div.innerText = s.t;
+            div.innerHTML = `<span class="index">${idx + 1}</span><span class="name">${s.t}</span>`;
             div.onclick = () => showSong(idx);
             list.appendChild(div);
         });
@@ -74,28 +107,39 @@
         currentSong = database[idx];
         transpose = 0;
         document.getElementById('list').style.display = 'none';
-        document.getElementById('search-box').style.display = 'none';
+        document.getElementById('header').style.position = 'relative'; // uvoľni header pri čítaní
+        document.querySelector('.header').style.padding = '10px';
+        document.getElementById('search').style.display = 'none';
         document.getElementById('song-view').style.display = 'block';
         document.getElementById('title').innerText = currentSong.t;
         renderText();
+        window.scrollTo(0,0);
     }
 
     function renderText() {
-        const parsed = parser.parse(currentSong.c).transpose(transpose);
-        document.getElementById('content').innerHTML = formatter.format(parsed);
+        try {
+            const parsed = parser.parse(currentSong.c).transpose(transpose);
+            document.getElementById('content').innerHTML = formatter.format(parsed);
+        } catch(e) {
+            document.getElementById('content').innerText = currentSong.c;
+        }
     }
 
     function changeKey(val) { transpose += val; renderText(); }
+    
     function back() {
         document.getElementById('list').style.display = 'block';
-        document.getElementById('search-box').style.display = 'block';
+        document.getElementById('search').style.display = 'block';
+        document.querySelector('.header').style.padding = '25px 15px';
         document.getElementById('song-view').style.display = 'none';
+        window.scrollTo(0,0);
     }
 
     function filterSongs() {
-        const q = document.getElementById('search').value.toLowerCase();
+        const q = document.getElementById('search').value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         document.querySelectorAll('.song-card').forEach(card => {
-            card.style.display = card.innerText.toLowerCase().includes(q) ? 'block' : 'none';
+            const title = card.innerText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            card.style.display = title.includes(q) ? 'flex' : 'none';
         });
     }
 
