@@ -6,6 +6,7 @@ let chordsVisible = true;
 let currentGroup = 'piesne';
 let baseKey = 'C';
 
+// XML NAČÍTANIE
 function parseXML() {
   fetch('export.zpk.xml')
     .then(res => res.text())
@@ -42,11 +43,11 @@ function displayPiesne(list) {
   });
 }
 
+// ZOBRAZENIE PIESNE
 function showSong(song) {
   currentSong = song;
   transposeStep = 0;
 
-  // NASTAVENIE PREDMETU PRE FORMULÁR
   const subjectInput = document.getElementById('email-subject');
   if(subjectInput) subjectInput.value = "Oprava piesne: " + song.title;
 
@@ -56,6 +57,9 @@ function showSong(song) {
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
   document.getElementById('song-title').textContent = song.title;
+  
+  // Reset formulára pri prepnutí piesne
+  document.getElementById('form-status').textContent = "";
   
   chordsVisible = true;
   const btn = document.getElementById('chord-btn');
@@ -141,14 +145,53 @@ function changeFontSize(delta) {
   document.getElementById('song-content').style.fontSize = fontSize + 'px';
 }
 
+// VYHĽADÁVANIE A AJAX FORMULÁR
 document.addEventListener('DOMContentLoaded', () => {
   parseXML();
+  
   const sInput = document.getElementById('search');
   if(sInput) {
     sInput.addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase();
       const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
       displayPiesne(filtered);
+    });
+  }
+
+  // ODOSIELANIE FORMULÁRA
+  const form = document.getElementById("my-form");
+  if (form) {
+    form.addEventListener("submit", async function(event) {
+      event.preventDefault();
+      const status = document.getElementById("form-status");
+      const button = document.getElementById("submit-btn");
+      const data = new FormData(event.target);
+
+      button.disabled = true;
+      button.textContent = "Odosielam...";
+      status.textContent = "";
+
+      fetch("https://formspree.io/f/mvzzkwlw", {
+        method: "POST",
+        body: data,
+        headers: { 'Accept': 'application/json' }
+      }).then(response => {
+        if (response.ok) {
+          status.style.color = "#00ff00";
+          status.textContent = "✓ Správa bola odoslaná!";
+          form.reset();
+          button.textContent = "Odoslať opravu";
+          button.disabled = false;
+        } else {
+          status.style.color = "#ff4444";
+          status.textContent = "Chyba pri odosielaní.";
+          button.disabled = false;
+        }
+      }).catch(error => {
+        status.style.color = "#ff4444";
+        status.textContent = "Problém so spojením.";
+        button.disabled = false;
+      });
     });
   }
 });
