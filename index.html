@@ -10,7 +10,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -55,21 +54,9 @@
       </div>
 
       <pre id="song-content"></pre>
-
-      <div class="feedback">
-        <h3>Ak si našiel chybu, napíš, opravím.</h3>
-        <form id="feedback-form">
-          <input type="text" name="from_name" placeholder="Tvoje meno" required />
-          <textarea name="message" placeholder="Popis chyby" required></textarea>
-          <button type="submit">Odoslať</button>
-        </form>
-      </div>
     </div>
   </div>
 
-  <script>
-    emailjs.init("Pk3TugJIcd2zBMS04");
-  </script>
   <script src="script.js"></script>
 </body>
 </html>
