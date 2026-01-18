@@ -6,6 +6,7 @@ let chordsVisible = true;
 let currentGroup = 'piesne';
 let baseKey = 'C';
 
+// NAČÍTANIE
 function parseXML() {
   fetch('export.zpk.xml')
     .then(res => res.text())
@@ -14,20 +15,21 @@ function parseXML() {
       const xml = parser.parseFromString(xmlText, 'application/xml');
       const songNodes = xml.querySelectorAll('song');
       
-      const all = Array.from(songNodes).map(song => ({
+      songs = Array.from(songNodes).map(song => ({
         title: song.querySelector('title')?.textContent.trim() || "Bez názvu",
         text: song.querySelector('songtext')?.textContent.trim() || ""
       }));
 
-      const text = all.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
-      const num  = all.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
-
-      text.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
-      num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
-
-      songs = [...text, ...num];
+      // Zoradenie
+      const textSongs = songs.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
+      const numSongs  = songs.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
+      textSongs.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
+      numSongs.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
+      
+      songs = [...textSongs, ...numSongs];
       displayPiesne(songs);
-    });
+    })
+    .catch(err => console.error("Chyba XML:", err));
 }
 
 function displayPiesne(list) {
@@ -42,26 +44,20 @@ function displayPiesne(list) {
   });
 }
 
+// ZOBRAZENIE
 function showSong(song) {
   currentSong = song;
   transposeStep = 0;
-
   const firstChordMatch = song.text.match(/\[(.*?)\]/);
-  if (firstChordMatch) {
-    const rootMatch = firstChordMatch[1].match(/[A-H][#b]?/);
-    baseKey = rootMatch ? rootMatch[0] : 'C';
-  } else {
-    baseKey = 'C';
-  }
+  baseKey = firstChordMatch ? firstChordMatch[1].match(/[A-H][#b]?/)?.[0] || 'C' : 'C';
 
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
   document.getElementById('song-title').textContent = song.title;
   
-  const chordBtn = document.getElementById('chord-btn');
-  chordBtn.innerHTML = '<i class="fas fa-eye"></i>';
-  chordBtn.style.color = '#fff';
   chordsVisible = true;
+  const btn = document.getElementById('chord-btn');
+  if(btn) { btn.innerHTML = '<i class="fas fa-eye"></i>'; btn.style.color = '#fff'; }
 
   updateTransposeDisplay();
   renderSong(song.text);
@@ -69,11 +65,12 @@ function showSong(song) {
 }
 
 function renderSong(text) {
-  let content = text.replace(/\[(.*?)\]/g, (match, chord) => {
+  const contentDiv = document.getElementById('song-content');
+  if (!contentDiv) return;
+  contentDiv.innerHTML = text.replace(/\[(.*?)\]/g, (match, chord) => {
     const transposed = transposeChord(chord, transposeStep);
     return chordsVisible ? `<span class="chord">${transposed}</span>` : '';
   });
-  document.getElementById('song-content').innerHTML = content;
 }
 
 function transposeChord(chord, steps) {
@@ -81,41 +78,33 @@ function transposeChord(chord, steps) {
   const scale = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
   const rootMatch = chord.match(/^([A-H][#b]?)/);
   if (!rootMatch) return chord;
-
   const root = rootMatch[1];
   const suffix = chord.substring(root.length);
-  const mapToIndex = {
-    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
-    'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
-    'A': 9, 'A#': 10, 'Bb': 10, 'B': 10, 'H': 11, 'Cb': 11
-  };
-
-  let index = mapToIndex[root];
+  const map = {'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':10,'H':11,'Cb':11};
+  let index = map[root];
   if (index === undefined) return chord;
-
-  const newIndex = (index + steps + 120) % 12;
-  return scale[newIndex] + suffix;
+  return scale[(index + steps + 120) % 12] + suffix;
 }
 
 function transposeSong(direction) {
-  let nextStep = transposeStep + direction;
-  if (nextStep >= -12 && nextStep <= 12) {
-    transposeStep = nextStep;
+  let next = transposeStep + direction;
+  if (next >= -12 && next <= 12) {
+    transposeStep = next;
     updateTransposeDisplay();
     renderSong(currentSong.text);
   }
 }
 
 function openLiturgieSong(title) {
-  const match = songs.find(s => s.title.toLowerCase() === title.toLowerCase());
-  if (match) { currentGroup = 'liturgia'; showSong(match); }
+  const s = songs.find(s => s.title.toLowerCase() === title.toLowerCase());
+  if (s) { currentGroup = 'liturgia'; showSong(s); }
 }
 
 function navigateSong(direction) {
-  const poradie = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
+  const lit = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
   let group = currentGroup === 'liturgia' 
-    ? poradie.map(t => songs.find(s => s.title.toLowerCase() === t.toLowerCase())).filter(Boolean)
-    : songs.filter(s => !poradie.map(p => p.toLowerCase()).includes(s.title.toLowerCase()));
+    ? lit.map(t => songs.find(s => s.title.toLowerCase() === t.toLowerCase())).filter(Boolean)
+    : songs.filter(s => !lit.map(p => p.toLowerCase()).includes(s.title.toLowerCase()));
   
   let idx = group.indexOf(currentSong);
   if (idx !== -1 && group[idx + direction]) showSong(group[idx + direction]);
@@ -136,7 +125,7 @@ function toggleChords() {
 
 function updateTransposeDisplay() {
   document.getElementById('base-key').textContent = baseKey;
-  document.getElementById('transpose-offset').textContent = transposeStep > 0 ? `+${transposeStep}` : transposeStep;
+  document.getElementById('transpose-offset').textContent = (transposeStep > 0 ? "+" : "") + transposeStep;
 }
 
 function changeFontSize(delta) {
@@ -144,9 +133,12 @@ function changeFontSize(delta) {
   document.getElementById('song-content').style.fontSize = fontSize + 'px';
 }
 
-document.getElementById('search')?.addEventListener('input', e => {
-  const query = e.target.value.toLowerCase();
-  displayPiesne(songs.filter(s => s.title.toLowerCase().includes(query)));
+// Vyhľadávanie - opravené
+document.addEventListener('DOMContentLoaded', () => {
+  parseXML();
+  document.getElementById('search').addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
+    displayPiesne(filtered);
+  });
 });
-
-window.addEventListener('DOMContentLoaded', parseXML);
