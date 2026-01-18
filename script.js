@@ -3,7 +3,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDF
 let songs = [];
 let filteredSongs = [];
 let currentSong = null;
-let currentModeList = []; // Tu sa ukladá aktuálne poradie (zoznam alebo playlist)
+let currentModeList = [];
 let transposeStep = 0;
 let fontSize = 17;
 let chordsVisible = true;
@@ -15,7 +15,8 @@ const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 
 async function parseXML() {
     try {
-        const res = await fetch(SCRIPT_URL + '?t=' + Date.now());
+        // ODSTRÁNENÉ ?t=Date.now() pre rýchlejšie načítanie
+        const res = await fetch(SCRIPT_URL);
         const xmlText = await res.text();
         const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
         const nodes = xml.getElementsByTagName('song');
@@ -55,7 +56,6 @@ function filterSongs() {
     renderAllSongs();
 }
 
-/* ================== EDITOR PLAYLISTU ================== */
 function addToSelection(id) {
     selectedSongIds.push(id);
     renderEditor();
@@ -99,7 +99,6 @@ function renderEditor() {
     }).join('');
 }
 
-/* ================== DETAIL PIESNE ================== */
 function openSongById(id) {
     const found = songs.find(s => s.id === id);
     if (!found) return;
@@ -150,7 +149,6 @@ function resetTranspose() { transposeStep = 0; document.getElementById('transpos
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
 function changeFontSize(dir) { fontSize += dir; renderSong(); }
 
-/* ================== ADMIN A PLAYLISTY ================== */
 function unlockAdmin() {
     const p = prompt('Heslo:');
     if (p === "qwer") {
@@ -176,7 +174,7 @@ function deletePlaylist(name) {
 }
 
 function loadPlaylistHeaders() {
-    fetch(`${SCRIPT_URL}?action=list&t=${Date.now()}`)
+    fetch(`${SCRIPT_URL}?action=list`)
         .then(r => r.json())
         .then(d => {
             const sect = document.getElementById('playlists-section');
@@ -208,7 +206,6 @@ function openPlaylist(name) {
         .then(r => r.text())
         .then(t => {
             const ids = t.split(',');
-            // Nastavenie currentModeList na piesne v playliste pre navigáciu
             currentModeList = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
             document.getElementById('piesne-list').innerHTML = 
                 `<div style="padding:10px; color:#00bfff; font-weight:bold; border-bottom:2px solid #00bfff; display:flex; justify-content:space-between; align-items:center;">
