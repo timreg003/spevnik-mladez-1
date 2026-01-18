@@ -6,7 +6,6 @@ let chordsVisible = true;
 let currentGroup = 'piesne';
 let baseKey = 'C';
 
-// NAČÍTANIE
 function parseXML() {
   fetch('export.zpk.xml')
     .then(res => res.text())
@@ -15,21 +14,20 @@ function parseXML() {
       const xml = parser.parseFromString(xmlText, 'application/xml');
       const songNodes = xml.querySelectorAll('song');
       
-      songs = Array.from(songNodes).map(song => ({
+      let allSongs = Array.from(songNodes).map(song => ({
         title: song.querySelector('title')?.textContent.trim() || "Bez názvu",
         text: song.querySelector('songtext')?.textContent.trim() || ""
       }));
 
-      // Zoradenie
-      const textSongs = songs.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
-      const numSongs  = songs.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
+      const textSongs = allSongs.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
+      const numSongs  = allSongs.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
       textSongs.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
       numSongs.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
       
       songs = [...textSongs, ...numSongs];
       displayPiesne(songs);
     })
-    .catch(err => console.error("Chyba XML:", err));
+    .catch(err => console.error("Chyba pri načítaní XML:", err));
 }
 
 function displayPiesne(list) {
@@ -44,7 +42,6 @@ function displayPiesne(list) {
   });
 }
 
-// ZOBRAZENIE
 function showSong(song) {
   currentSong = song;
   transposeStep = 0;
@@ -95,6 +92,13 @@ function transposeSong(direction) {
   }
 }
 
+// NOVÁ FUNKCIA: RESET TRANSPOZÍCIE
+function resetTranspose() {
+  transposeStep = 0;
+  updateTransposeDisplay();
+  renderSong(currentSong.text);
+}
+
 function openLiturgieSong(title) {
   const s = songs.find(s => s.title.toLowerCase() === title.toLowerCase());
   if (s) { currentGroup = 'liturgia'; showSong(s); }
@@ -133,12 +137,14 @@ function changeFontSize(delta) {
   document.getElementById('song-content').style.fontSize = fontSize + 'px';
 }
 
-// Vyhľadávanie - opravené
 document.addEventListener('DOMContentLoaded', () => {
   parseXML();
-  document.getElementById('search').addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase();
-    const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
-    displayPiesne(filtered);
-  });
+  const sInput = document.getElementById('search');
+  if(sInput) {
+    sInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
+      displayPiesne(filtered);
+    });
+  }
 });
