@@ -51,13 +51,28 @@ h1 {
   background: none;
   border: none;
   color: #aaa;
-  font-size: 16px;
+  font-size: 20px;
   cursor: pointer;
   margin-bottom: 10px;
 }
 
 .back-btn:hover {
   color: #fff;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.controls button {
+  background: #1e1e1e;
+  border: none;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .transpose-bar,
@@ -96,4 +111,38 @@ pre {
   position: relative;
   top: -0.3em;
   font-size: 0.95em;
+}
+
+.feedback {
+  margin-top: 40px;
+  padding: 20px;
+  background: #1e1e1e;
+  border-radius: 8px;
+}
+
+.feedback h3 {
+  margin-top: 0;
+}
+
+.feedback input,
+.feedback textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #2a2a2a;
+  color: #fff;
+  font-family: inherit;
+}
+
+.feedback button {
+  margin-top: 10px;
+  padding: 10px 20px;
+  background: #00bfff;
+  border: none;
+  color: #000;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
 }
