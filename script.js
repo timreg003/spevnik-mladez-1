@@ -51,6 +51,7 @@ function showSong(song, index) {
 
   const firstChordMatch = song.text.match(/\[(.*?)\]/);
   if (firstChordMatch) {
+    // Regex hľadá A až H, aby správne identifikoval pôvodnú tóninu
     const rootMatch = firstChordMatch[1].match(/[A-H][#b]?/);
     baseKey = rootMatch ? rootMatch[0] : 'C';
   } else {
@@ -82,21 +83,21 @@ function renderSong(text) {
   document.getElementById('song-content').innerHTML = content;
 }
 
-// TRANSPZÍCIA: Hm -> Cm pri +1, používa # a slovenské H
+// HLAVNÁ FUNKCIA PRE TRANSPOZÍCIU (H -> C, len krížiky)
 function transposeChord(chord, steps) {
   if (steps === 0) return chord;
 
-  // Chromatická stupnica s krížikmi a slovenským H
+  // Stupnica definovaná so slovenským H a výhradne krížikmi
   const scale = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
 
-  // Regex upravený na A-H
+  // Regex upravený tak, aby zachytil aj H
   const rootMatch = chord.match(/^([A-H][#b]?)/);
   if (!rootMatch) return chord;
 
   const root = rootMatch[1];
   const suffix = chord.substring(root.length);
 
-  // Prevod vstupných tónov na index v stupnici (vrátane béčok na krížiky)
+  // Mapa pre prevod všetkých formátov (aj béčok) na indexy
   const mapToIndex = {
     'C': 0, 'C#': 1, 'Db': 1,
     'D': 2, 'D#': 3, 'Eb': 3,
@@ -110,16 +111,21 @@ function transposeChord(chord, steps) {
   let index = mapToIndex[root];
   if (index === undefined) return chord;
 
-  const newIndex = (index + steps + 120) % 12; // 120 pre istotu pri veľkých mínusoch
+  const newIndex = (index + steps + 120) % 12;
   const newRoot = scale[newIndex];
 
   return newRoot + suffix;
 }
 
 function transposeSong(direction) {
-  transposeStep += direction;
-  updateTransposeDisplay();
-  renderSong(currentSong.text);
+  let nextStep = transposeStep + direction;
+
+  // OHRANIČENIE: Transpozícia len o jednu oktávu hore/dole (-12 až +12)
+  if (nextStep >= -12 && nextStep <= 12) {
+    transposeStep = nextStep;
+    updateTransposeDisplay();
+    renderSong(currentSong.text);
+  }
 }
 
 function updateTransposeDisplay() {
@@ -164,20 +170,7 @@ function navigateSong(direction) {
 function backToList() {
   document.getElementById('song-list').style.display = 'block';
   document.getElementById('song-display').style.display = 'none';
-  // ODSTRÁNENÉ: parseXML() - aby sa dizajn pri návrate neresetoval
+  // POZNÁMKA: parseXML() tu nevoláme, aby sme zachovali výkon a vzhľad
 }
 
-document.getElementById('search').addEventListener('input', e => {
-  const query = e.target.value.toLowerCase();
-  const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
-  displayPiesne(filtered);
-});
-
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('fontSize');
-  if (saved) {
-    fontSize = parseInt(saved);
-    document.getElementById('song-content').style.fontSize = fontSize + 'px';
-  }
-  parseXML();
-});
+document.getElementById('
