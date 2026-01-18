@@ -26,7 +26,7 @@ async function parseXML() {
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const songNodes = xml.getElementsByTagName('song');
     
-    if (songNodes.length === 0) throw new Error("XML neobsahuje žiadne piesne.");
+    if (songNodes.length === 0) throw new Error("Nepodarilo sa načítať piesne.");
 
     songs = Array.from(songNodes).map(song => {
       const getVal = (t) => song.getElementsByTagName(t)[0]?.textContent.trim() || "";
@@ -46,7 +46,6 @@ async function parseXML() {
         const idA = a.displayId, idB = b.displayId;
         const isNumA = /^\d+$/.test(idA), isNumB = /^\d+$/.test(idB);
         const isMA = idA.startsWith('M'), isMB = idB.startsWith('M');
-
         if (isNumA && !isNumB) return -1;
         if (!isNumA && isNumB) return 1;
         if (isNumA && isNumB) return parseInt(idA) - parseInt(idB);
@@ -61,7 +60,7 @@ async function parseXML() {
     loadPlaylistHeaders();
     setInterval(loadPlaylistHeaders, 5000);
   } catch (e) {
-    listEl.innerHTML = `<span style="color:red">Chyba: ${e.message}<br>Skontroluj internet alebo URL skriptu.</span>`;
+    listEl.innerHTML = `<span style="color:red">Chyba: ${e.message}</span>`;
   }
 }
 
@@ -80,11 +79,7 @@ function renderAllSongs() {
 
 function filterSongs() {
   const term = document.getElementById('search').value.toLowerCase();
-  filteredSongs = songs.filter(s => 
-    s.title.toLowerCase().includes(term) || 
-    s.displayId.toLowerCase().includes(term) ||
-    formatSongId(s.displayId).includes(term)
-  );
+  filteredSongs = songs.filter(s => s.title.toLowerCase().includes(term) || formatSongId(s.displayId).includes(term));
   renderAllSongs();
 }
 
@@ -97,7 +92,7 @@ function openSongById(id, mode) {
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
     document.getElementById('render-title').innerText = (currentSong.displayId ? formatSongId(currentSong.displayId) + '. ' : '') + currentSong.title;
-    document.getElementById('render-key').innerText = "Pôvodná tónina: " + currentSong.originalKey;
+    document.getElementById('render-key').innerText = "Tónina: " + currentSong.originalKey;
     renderSong();
     window.scrollTo(0,0);
 }
@@ -111,12 +106,10 @@ function renderSong() {
     let ni = (i + st) % 12; while(ni<0) ni+=12;
     return notes[ni];
   });
-
   let text = currentSong.origText;
   if (transposeStep !== 0) text = text.replace(/\[(.*?)\]/g, (m, c) => `[${trans(c, transposeStep)}]`);
   if (!chordsVisible) text = text.replace(/\[.*?\]/g, '');
   else text = text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
-
   const contentEl = document.getElementById('song-content');
   contentEl.innerHTML = text;
   contentEl.style.fontSize = fontSize + "px";
@@ -141,18 +134,18 @@ function addToSelection(id) {
 }
 
 function renderSelected() {
-  document.getElementById('selected-list').innerHTML = selectedSongIds.map((id, i) => {
+  document.getElementById('selected-list').innerHTML = selectedSongIds.map(id => {
     const s = songs.find(x => x.id === id);
-    return `<div style="display:flex; justify-content:space-between; background:#2a2a2a; padding:8px; margin-bottom:4px; border-radius:5px; font-size:13px;">${s.title}<div><i class="fas fa-times" onclick="addToSelection('${id}')" style="color:red"></i></div></div>`;
+    return `<div style="background:#2a2a2a; padding:5px 10px; margin-bottom:2px; border-radius:4px; font-size:12px;">${s.title}</div>`;
   }).join('');
 }
 
 function savePlaylist() {
   const name = document.getElementById('playlist-name').value;
-  if (!name || !selectedSongIds.length) return alert("Zadaj názov!");
+  if (!name || !selectedSongIds.length) return alert("Chýba názov alebo piesne!");
   const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
   window.open(url, '_blank', 'width=1,height=1');
-  setTimeout(() => { alert("Uložené!"); isAdmin = false; document.getElementById('admin-panel').style.display = 'none'; selectedSongIds = []; renderAllSongs(); loadPlaylistHeaders(); }, 2000);
+  setTimeout(() => { alert("Playlist uložený!"); isAdmin = false; document.getElementById('admin-panel').style.display = 'none'; selectedSongIds = []; renderAllSongs(); loadPlaylistHeaders(); }, 2000);
 }
 
 async function loadPlaylistHeaders() {
@@ -162,10 +155,10 @@ async function loadPlaylistHeaders() {
     const container = document.getElementById('playlists-section');
     if (!data.length) { container.innerHTML = ""; return; }
     container.innerHTML = "<h2>PLAYLIST</h2>" + data.map(p => `
-      <div style="background:#1e1e1e; border:1px solid #333; padding:12px; margin-bottom:8px; border-radius:10px; cursor:pointer; display:flex; justify-content:space-between;" onclick="openPlaylist('${p.name}')">
+      <div style="background:#1e1e1e; border:1px solid #333; padding:12px; margin-bottom:8px; border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="openPlaylist('${p.name}')">
         <span>📄 ${p.name}</span>
-        ${isAdmin ? `<i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:red"></i>` : ''}
-      </div>`).join('') + "<hr>";
+        ${isAdmin ? `<i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444; padding:10px;"></i>` : ''}
+      </div>`).join('') + "<hr style='border:0; border-top:1px solid #333; margin:15px 0;'>";
   } catch(e) {}
 }
 
@@ -185,10 +178,14 @@ function navigateSong(step) {
 }
 
 function deletePlaylist(name) {
-  if(confirm("Zmazať?")) {
+  if(confirm("Naozaj zmazať '" + name + "'?")) {
     const url = `${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`;
     const win = window.open(url, '_blank', 'width=1,height=1');
-    setTimeout(() => { if(win) win.close(); loadPlaylistHeaders(); }, 1500);
+    setTimeout(() => { 
+      if(win) win.close(); 
+      loadPlaylistHeaders(); 
+      alert("Playlist '" + name + "' bol odstránený.");
+    }, 2000);
   }
 }
 
