@@ -21,9 +21,9 @@ button:active { background: #00bfff; color: #000; }
 
 #song-content { 
     background: #1a1a1a; 
-    padding: 30px 15px; 
+    padding: 35px 15px; 
     border-radius: 12px; 
-    line-height: 2.3; 
+    line-height: 2.6; 
     white-space: pre-wrap; 
     margin-top: 10px; 
     font-size: 17px; 
@@ -31,4 +31,10 @@ button:active { background: #00bfff; color: #000; }
     color: #fff;
 }
 
-.chord { color: #00bfff; font-weight: bold; margin: 0 2px; display: inline-block; }
+/* AKORDY POSUNUTÉ VYŠŠIE */
+.chord { color: #00bfff; font-weight: bold; margin: 0 2px; position: relative; top: -0.5em; font-size: 0.9em; display: inline-block; height: 0; }
+
+.feedback-section { margin-top: 50px; padding: 20px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; text-align: center; }
+.custom-form { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.custom-form input, .custom-form textarea { background: #121212; border: 1px solid #333; color: #fff; padding: 12px; border-radius: 8px; outline: none; }
+.submit-btn { background: #00bfff; color: #000; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer; }
