@@ -1,4 +1,5 @@
 let songs = [];
+let filteredSongs = [];
 let currentSong = null;
 let currentMode = "all"; 
 let currentModeList = [];
@@ -17,6 +18,7 @@ function formatSongId(id) {
 }
 
 async function parseXML() {
+  const listEl = document.getElementById('piesne-list');
   try {
     const res = await fetch(SCRIPT_URL + "?t=" + new Date().getTime());
     const xmlText = await res.text();
@@ -24,6 +26,8 @@ async function parseXML() {
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const songNodes = xml.getElementsByTagName('song');
     
+    if (songNodes.length === 0) throw new Error("XML neobsahuje žiadne piesne.");
+
     songs = Array.from(songNodes).map(song => {
       const getVal = (t) => song.getElementsByTagName(t)[0]?.textContent.trim() || "";
       const st = getVal('songtext');
@@ -39,36 +43,32 @@ async function parseXML() {
     });
     
     songs.sort((a, b) => {
-        const idA = a.displayId;
-        const idB = b.displayId;
-        const isNumA = /^\d+$/.test(idA);
-        const isNumB = /^\d+$/.test(idB);
-        const isMA = idA.startsWith('M');
-        const isMB = idB.startsWith('M');
+        const idA = a.displayId, idB = b.displayId;
+        const isNumA = /^\d+$/.test(idA), isNumB = /^\d+$/.test(idB);
+        const isMA = idA.startsWith('M'), isMB = idB.startsWith('M');
 
         if (isNumA && !isNumB) return -1;
         if (!isNumA && isNumB) return 1;
         if (isNumA && isNumB) return parseInt(idA) - parseInt(idB);
         if (isMA && !isMB) return -1;
         if (!isMA && isMB) return 1;
-        if (isMA && isMB) {
-            const numA = parseInt(idA.substring(1)) || 0;
-            const numB = parseInt(idB.substring(1)) || 0;
-            return numA - numB;
-        }
+        if (isMA && isMB) return (parseInt(idA.substring(1)) || 0) - (parseInt(idB.substring(1)) || 0);
         return idA.localeCompare(idB);
     });
 
+    filteredSongs = [...songs];
     renderAllSongs();
     loadPlaylistHeaders();
-    setInterval(loadPlaylistHeaders, 4000);
-  } catch (e) { console.error(e); }
+    setInterval(loadPlaylistHeaders, 5000);
+  } catch (e) {
+    listEl.innerHTML = `<span style="color:red">Chyba: ${e.message}<br>Skontroluj internet alebo URL skriptu.</span>`;
+  }
 }
 
 function renderAllSongs() {
   const container = document.getElementById('piesne-list');
-  currentModeList = songs;
-  container.innerHTML = songs.map(s => {
+  currentModeList = filteredSongs;
+  container.innerHTML = filteredSongs.map(s => {
     const isSel = selectedSongIds.includes(s.id);
     const action = isAdmin ? `addToSelection('${s.id}')` : `openSongById('${s.id}', 'all')`;
     return `<div onclick="${action}" style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin-bottom:6px; background:#1e1e1e; border-radius:10px; cursor:pointer; ${isSel ? 'border: 1px solid #00bfff;' : ''}">
@@ -76,6 +76,16 @@ function renderAllSongs() {
         ${isAdmin ? `<i class="fas ${isSel ? 'fa-check-circle' : 'fa-plus-circle'}" style="color:#00bfff"></i>` : ''}
       </div>`;
   }).join('');
+}
+
+function filterSongs() {
+  const term = document.getElementById('search').value.toLowerCase();
+  filteredSongs = songs.filter(s => 
+    s.title.toLowerCase().includes(term) || 
+    s.displayId.toLowerCase().includes(term) ||
+    formatSongId(s.displayId).includes(term)
+  );
+  renderAllSongs();
 }
 
 function openSongById(id, mode) {
@@ -103,9 +113,7 @@ function renderSong() {
   });
 
   let text = currentSong.origText;
-  if (transposeStep !== 0) {
-    text = text.replace(/\[(.*?)\]/g, (m, c) => `[${trans(c, transposeStep)}]`);
-  }
+  if (transposeStep !== 0) text = text.replace(/\[(.*?)\]/g, (m, c) => `[${trans(c, transposeStep)}]`);
   if (!chordsVisible) text = text.replace(/\[.*?\]/g, '');
   else text = text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
 
@@ -115,11 +123,7 @@ function renderSong() {
   document.getElementById('transpose-val').innerText = (transposeStep > 0 ? "+" : "") + transposeStep;
 }
 
-function transposeSong(step) {
-  const next = transposeStep + step;
-  if (next >= -12 && next <= 12) { transposeStep = next; renderSong(); }
-}
-
+function transposeSong(step) { transposeStep += step; renderSong(); }
 function resetTranspose() { transposeStep = 0; renderSong(); }
 function closeSong() { document.getElementById('song-list').style.display = 'block'; document.getElementById('song-detail').style.display = 'none'; }
 function changeFontSize(s) { fontSize += s; renderSong(); }
@@ -127,7 +131,7 @@ function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
 
 function unlockAdmin() {
   const p = prompt("Heslo:");
-  if (p) { adminPassword = p; isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderAllSongs(); loadPlaylistHeaders(); }
+  if (p) { adminPassword = p; isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderAllSongs(); }
 }
 
 function addToSelection(id) {
@@ -139,13 +143,8 @@ function addToSelection(id) {
 function renderSelected() {
   document.getElementById('selected-list').innerHTML = selectedSongIds.map((id, i) => {
     const s = songs.find(x => x.id === id);
-    return `<div style="display:flex; justify-content:space-between; background:#2a2a2a; padding:8px; margin-bottom:4px; border-radius:5px; font-size:13px;">${s.title}<div><i class="fas fa-arrow-up" onclick="event.stopPropagation(); moveInSelection(${i},-1)" style="margin-right:10px; color:#00bfff"></i><i class="fas fa-arrow-down" onclick="event.stopPropagation(); moveInSelection(${i},1)" style="margin-right:10px; color:#00bfff"></i><i class="fas fa-times" onclick="event.stopPropagation(); addToSelection('${id}')" style="color:red"></i></div></div>`;
+    return `<div style="display:flex; justify-content:space-between; background:#2a2a2a; padding:8px; margin-bottom:4px; border-radius:5px; font-size:13px;">${s.title}<div><i class="fas fa-times" onclick="addToSelection('${id}')" style="color:red"></i></div></div>`;
   }).join('');
-}
-
-function moveInSelection(i, d) {
-  const ni = i + d;
-  if (ni >= 0 && ni < selectedSongIds.length) { [selectedSongIds[i], selectedSongIds[ni]] = [selectedSongIds[ni], selectedSongIds[i]]; renderSelected(); }
 }
 
 function savePlaylist() {
@@ -153,12 +152,7 @@ function savePlaylist() {
   if (!name || !selectedSongIds.length) return alert("Zadaj názov!");
   const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
   window.open(url, '_blank', 'width=1,height=1');
-  setTimeout(() => { 
-    alert("Odoslané!"); 
-    selectedSongIds = []; isAdmin = false; 
-    document.getElementById('admin-panel').style.display = 'none';
-    renderAllSongs();
-  }, 2000);
+  setTimeout(() => { alert("Uložené!"); isAdmin = false; document.getElementById('admin-panel').style.display = 'none'; selectedSongIds = []; renderAllSongs(); loadPlaylistHeaders(); }, 2000);
 }
 
 async function loadPlaylistHeaders() {
@@ -179,22 +173,19 @@ async function openPlaylist(name) {
   const res = await fetch(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(name)}&t=${Date.now()}`);
   const idsText = await res.text();
   const ids = idsText.split(',');
-  const list = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
-  currentModeList = list;
+  currentModeList = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
   currentMode = "playlist";
   document.getElementById('piesne-list').innerHTML = `<button onclick="renderAllSongs();" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; color:#00bfff; border-radius:10px; border:1px solid #333; font-weight:bold;">⬅ Späť na všetky piesne</button>` + 
-  list.map(s => `<div onclick="openSongById('${s.id}', 'playlist')" style="background:#1e1e1e; padding:12px; margin-bottom:6px; border-radius:10px;"><span style="color:#00bfff; font-weight:bold;">${formatSongId(s.displayId)}.</span> ${s.title}</div>`).join('');
+  currentModeList.map(s => `<div onclick="openSongById('${s.id}', 'playlist')" style="background:#1e1e1e; padding:12px; margin-bottom:6px; border-radius:10px;"><span style="color:#00bfff; font-weight:bold;">${formatSongId(s.displayId)}.</span> ${s.title}</div>`).join('');
 }
 
 function navigateSong(step) {
-    const list = currentModeList;
-    const currIdx = list.findIndex(s => s.id === currentSong.id);
-    const nextIdx = currIdx + step;
-    if (nextIdx >= 0 && nextIdx < list.length) openSongById(list[nextIdx].id);
+    const idx = currentModeList.findIndex(s => s.id === currentSong.id);
+    if (idx + step >= 0 && idx + step < currentModeList.length) openSongById(currentModeList[idx+step].id);
 }
 
 function deletePlaylist(name) {
-  if(confirm("Naozaj chceš zmazať playlist '" + name + "'?")) {
+  if(confirm("Zmazať?")) {
     const url = `${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`;
     const win = window.open(url, '_blank', 'width=1,height=1');
     setTimeout(() => { if(win) win.close(); loadPlaylistHeaders(); }, 1500);
