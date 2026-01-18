@@ -35,14 +35,8 @@ h1 {
 
 #piesne-list div, #playlists-section div { 
     background: #1e1e1e; 
-    padding: 12px 14px; 
-    margin-bottom: 6px; 
-    border-radius: 10px; 
     cursor: pointer; 
-    transition: 0.2s;
 }
-
-#piesne-list div:active { background: #252525; }
 
 h2 { 
     color: #00bfff; 
@@ -61,7 +55,6 @@ h2 {
     margin-bottom: 10px; 
     gap: 10px; 
     border: 1px solid #333; 
-    flex-wrap: wrap;
 }
 
 .control-group { 
@@ -93,16 +86,13 @@ button {
     cursor: pointer; 
 }
 
-button:hover { background: #333; }
-
 .back-btn { 
     background: none; 
-    color: #00bfff; 
+    color: #aaa; 
     font-size: 16px; 
     border: none; 
     cursor: pointer; 
     margin-bottom: 10px; 
-    padding: 5px 0;
 }
 
 #song-content { 
@@ -112,17 +102,15 @@ button:hover { background: #333; }
     line-height: 2.2; 
     white-space: pre-wrap; 
     margin-top: 10px; 
+    font-size: 17px; 
     text-align: center; 
     color: #fff; 
-    border: 1px solid #222;
 }
 
 .chord { 
     color: #00bfff; 
     font-weight: bold; 
-    margin: 0 2px;
-    background: #252525;
-    padding: 2px 4px;
+    background: #252525; 
+    padding: 1px 4px; 
     border-radius: 4px;
-    font-family: monospace;
 }
