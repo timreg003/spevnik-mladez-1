@@ -3,7 +3,6 @@ let currentSong = null;
 let transposeStep = 0;
 let fontSize = 17;
 
-// === NAČÍTANIE PIESNÍ ===
 function parseXML() {
   fetch('export.zpk.xml')
     .then(res => res.text())
@@ -16,33 +15,28 @@ function parseXML() {
         text: song.querySelector('songtext').textContent.trim()
       }));
 
+      // rozdelíme na textové a číselné
       const text = all.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
       const num  = all.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
+
+      // zoradíme: A–Z, potom čísla 0–9
       text.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
       num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
-      songs = [...text, ...num];
 
-      renderSongList(songs);
+      songs = [...text, ...num];
+      displayList(songs);
     });
 }
 
-function renderSongList(list) {
+function displayList(list) {
   const listDiv = document.getElementById('song-list');
   listDiv.innerHTML = '';
   list.forEach(song => {
     const div = document.createElement('div');
-    div.innerHTML = `${song.title}`;
-    div.style.cursor = 'pointer';
-    div.style.fontSize = '19px';
-    div.style.lineHeight = '1.9';
-    div.style.padding = '14px';
-    div.style.borderBottom = '1px solid #2a2a2a';
-    div.style.borderRadius = '8px';
-    div.style.marginBottom = '10px';
-    div.style.background = '#1e1e1e';
-    div.style.transition = 'background 0.2s';
-    div.onmouseenter = () => div.style.background = '#2a2a2a';
-    div.onmouseleave = () => div.style.background = '#1e1e1e';
+    // číselné bez symbolu – aby boli úplne na konci
+    const isNumber = /^\d+(\.\d+)?$/.test(song.title);
+    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
+    div.onclick = () => showSong(song);
     listDiv.appendChild(div);
   });
 }
@@ -69,4 +63,41 @@ function transposeChord(chord, steps) {
   const root = chord.match(/[A-G][#b]?/);
   if (!root) return chord;
   const rootOnly = root[0];
-  const
+  const suffix = chord.replace(rootOnly, '');
+  const index = chromatic.indexOf(rootOnly);
+  if (index === -1) return chord;
+  const newIndex = (index + steps + 12) % 12;
+  return chromatic[newIndex] + suffix;
+}
+
+function transposeSong(direction) {
+  transposeStep += direction;
+  renderSong(currentSong.text);
+}
+
+function changeFontSize(delta) {
+  fontSize = Math.max(12, Math.min(28, fontSize + delta));
+  document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  localStorage.setItem('fontSize', fontSize);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('fontSize');
+  if (saved) {
+    fontSize = parseInt(saved);
+    document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  }
+});
+
+function backToList() {
+  document.getElementById('song-list').style.display = 'block';
+  document.getElementById('song-display').style.display = 'none';
+}
+
+document.getElementById('search').addEventListener('input', e => {
+  const query = e.target.value.toLowerCase();
+  const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
+  displayList(filtered);
+});
+
+parseXML();
