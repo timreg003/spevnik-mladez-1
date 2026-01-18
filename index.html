@@ -8,9 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Spevník">
   <link rel="apple-touch-icon" href="icon.png">
-  <link rel="icon" type="image/png" href="icon.png">
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -19,60 +17,146 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
       });
     }
   </script>
 </head>
 <body>
   <div class="container">
-    <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px; padding-top: 10px;">
-      <i class="fas fa-lock" style="position: absolute; left: 0; opacity: 0.15; cursor: pointer; padding: 10px;" onclick="unlockAdmin()"></i>
+    <div class="header-ui">
+      <i class="fas fa-lock admin-trigger" onclick="unlockAdmin()"></i>
       <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
-      <i class="fas fa-home" style="position: absolute; right: 0; font-size: 1.2em; color: #00bfff; cursor: pointer; padding: 10px;" onclick="smartReset()"></i>
+      <i class="fas fa-home home-trigger" onclick="smartReset()"></i>
     </div>
 
     <div id="song-list">
       <input type="text" id="search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterSongs()" />
       <div id="playlists-section"></div>
-
-      <div id="admin-panel" style="display:none; background:#1e1e1e; padding:15px; border-radius:12px; margin-bottom:20px; border:1px solid #00bfff;">
-        <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Editor playlistu</h3>
-        <div id="selected-list-editor" style="margin-bottom:15px; max-height: 250px; overflow-y: auto; background: #121212; border-radius: 8px; padding: 5px; border: 1px solid #333;"></div>
-        <input type="text" id="playlist-name" placeholder="Názov nového playlistu" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box; outline: none;">
-        <div style="display: flex; gap: 10px;">
-            <button onclick="savePlaylist()" style="flex: 2; background:#00bfff; color:black; font-weight:bold; padding:12px; border-radius:8px; border:none;">ULOŽIŤ</button>
-            <button onclick="clearSelection()" style="flex: 1; background:#333; color:white; padding:12px; border-radius:8px; border:none;">ZMAZAŤ</button>
+      
+      <div id="admin-panel" style="display:none;">
+        <div class="admin-box">
+          <h3>Editor playlistu</h3>
+          <div id="selected-list-editor"></div>
+          <input type="text" id="playlist-name" placeholder="Názov playlistu">
+          <div class="admin-btns">
+            <button onclick="savePlaylist()" class="save-btn">ULOŽIŤ</button>
+            <button onclick="clearSelection()" class="clear-btn">ZMAZAŤ</button>
+          </div>
         </div>
       </div>
 
-      <div id="piesne-list" style="text-align:center; padding:20px; color: #888;">Načítavam spevník...</div>
+      <div id="piesne-list" class="loader-text">Načítavam spevník...</div>
     </div>
 
     <div id="song-detail" style="display:none;">
-      <div style="text-align:center; margin-bottom:15px;">
-        <h2 id="render-title"></h2>
-      </div>
-      <button class="back-btn" onclick="closeSong()"><i class="fas fa-arrow-left"></i> Späť na zoznam</button>
-      <div class="controls">
-        <div class="control-group">
+      <h2 id="render-title"></h2>
+      <button class="back-link" onclick="closeSong()"><i class="fas fa-chevron-left"></i> Späť na zoznam</button>
+      
+      <div class="controls-grid">
+        <div class="ctrl-item">
           <small>Pieseň</small>
-          <div class="btn-row">
-            <button onclick="navigateSong(-1)"><i class="fas fa-chevron-left"></i></button>
-            <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i></button>
+          <div class="btn-group">
+            <button onclick="navigateSong(-1)"><i class="fas fa-arrow-left"></i></button>
+            <button onclick="navigateSong(1)"><i class="fas fa-arrow-right"></i></button>
           </div>
         </div>
-        <div class="control-group">
+        <div class="ctrl-item">
           <small>Tónina: <span id="transpose-val">0</span></small>
-          <div class="btn-row">
-            <button onclick="transposeSong(-1)"><i class="fas fa-minus"></i></button>
+          <div class="btn-group">
+            <button onclick="transposeSong(-1)">-</button>
             <button onclick="resetTranspose()"><i class="fas fa-undo"></i></button>
-            <button onclick="transposeSong(1)"><i class="fas fa-plus"></i></button>
+            <button onclick="transposeSong(1)">+</button>
           </div>
         </div>
-        <div class="control-group">
+        <div class="ctrl-item">
           <small>Zobrazenie</small>
-          <div class="btn-row">
+          <div class="btn-group">
+            <button onclick="toggleChords()"><i class="fas fa-guitar"></i></button>
+            <button onclick="changeFontSize(-1)">A-</button>
+            <button onclick="changeFontSize(1)">A+</button>
+          </div>
+        </div>
+      </div>
+      <div id="song-content"></div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html><!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Mládežnícky spevník NIŽNÁ</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+      });
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <div class="header-ui">
+      <i class="fas fa-lock admin-trigger" onclick="unlockAdmin()"></i>
+      <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
+      <i class="fas fa-home home-trigger" onclick="smartReset()"></i>
+    </div>
+
+    <div id="song-list">
+      <input type="text" id="search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterSongs()" />
+      <div id="playlists-section"></div>
+      
+      <div id="admin-panel" style="display:none;">
+        <div class="admin-box">
+          <h3>Editor playlistu</h3>
+          <div id="selected-list-editor"></div>
+          <input type="text" id="playlist-name" placeholder="Názov playlistu">
+          <div class="admin-btns">
+            <button onclick="savePlaylist()" class="save-btn">ULOŽIŤ</button>
+            <button onclick="clearSelection()" class="clear-btn">ZMAZAŤ</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="piesne-list" class="loader-text">Načítavam spevník...</div>
+    </div>
+
+    <div id="song-detail" style="display:none;">
+      <h2 id="render-title"></h2>
+      <button class="back-link" onclick="closeSong()"><i class="fas fa-chevron-left"></i> Späť na zoznam</button>
+      
+      <div class="controls-grid">
+        <div class="ctrl-item">
+          <small>Pieseň</small>
+          <div class="btn-group">
+            <button onclick="navigateSong(-1)"><i class="fas fa-arrow-left"></i></button>
+            <button onclick="navigateSong(1)"><i class="fas fa-arrow-right"></i></button>
+          </div>
+        </div>
+        <div class="ctrl-item">
+          <small>Tónina: <span id="transpose-val">0</span></small>
+          <div class="btn-group">
+            <button onclick="transposeSong(-1)">-</button>
+            <button onclick="resetTranspose()"><i class="fas fa-undo"></i></button>
+            <button onclick="transposeSong(1)">+</button>
+          </div>
+        </div>
+        <div class="ctrl-item">
+          <small>Zobrazenie</small>
+          <div class="btn-group">
             <button onclick="toggleChords()"><i class="fas fa-guitar"></i></button>
             <button onclick="changeFontSize(-1)">A-</button>
             <button onclick="changeFontSize(1)">A+</button>
