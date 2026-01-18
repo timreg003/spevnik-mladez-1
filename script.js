@@ -90,15 +90,21 @@ function startNewPlaylist() {
   const name = prompt('Názov nového playlistu (napr. nedeľa-29-6):');
   if (!name || !name.trim()) return;
 
+  // výber piesní – pomocou prompt – bez zaškrtávacích políčok
   const selected = [];
-  const checkboxes = document.querySelectorAll('#song-list input[type="checkbox"]:checked');
-  checkboxes.forEach(cb => {
-    selected.push({ title: cb.value });
-  });
-  if (selected.length === 0) {
-    alert('Vyber aspoň jednu pieseň');
-    return;
+  let more = true;
+  while (more) {
+    const title = prompt('Zadaj názov piesne (alebo nechaj prázdne pre ukončenie):');
+    if (!title || !title.trim()) { more = false; break; }
+    const found = songs.find(s => s.title.toLowerCase() === title.toLowerCase().trim());
+    if (found) {
+      selected.push({ title: found.title });
+    } else {
+      alert('Pieseň nebola nájdená – skús znova.');
+    }
   }
+
+  if (selected.length === 0) { alert('Neboli vybrané žiadne piesne'); return; }
 
   playlist = selected;
   localStorage.setItem('playlist', JSON.stringify(playlist));
@@ -112,31 +118,6 @@ function startNewPlaylist() {
 }
 
 // === NAČÍTANIE PLAYLISTU Z XML ===
-function loadPlaylist() {
-  const saved = localStorage.getItem('playlist');
-  const savedTime = localStorage.getItem('playlistTime');
-  const savedName = localStorage.getItem('playlistName');
-  const now = Date.now();
-
-  if (saved && savedTime) {
-    const age = now - parseInt(savedTime);
-    if (age < PLAYLIST_DURATION) {
-      playlist = JSON.parse(saved);
-      renderPublicPlaylist();
-      document.getElementById('public-playlist-section').style.display = 'block';
-      document.getElementById('playlist-creator').style.display = 'none';
-      return;
-    } else {
-      localStorage.removeItem('playlist');
-      localStorage.removeItem('playlistTime');
-      localStorage.removeItem('playlistName');
-    }
-  }
-  document.getElementById('public-playlist-section').style.display = 'none';
-  document.getElementById('playlist-creator').style.display = 'block';
-}
-
-// === HLAVNÉ FUNKCIE ===
 function parseXML() {
   fetch('export.zpk.xml')
     .then(res => res.text())
