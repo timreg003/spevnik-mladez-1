@@ -1,7 +1,9 @@
 let songs = [];
 let currentSong = null;
+let currentIndex = 0;
 let transposeStep = 0;
 let fontSize = 17;
+let chordsVisible = true;
 
 function parseXML() {
   fetch('export.zpk.xml')
@@ -15,11 +17,9 @@ function parseXML() {
         text: song.querySelector('songtext').textContent.trim()
       }));
 
-      // rozdelíme na textové a číselné
       const text = all.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
       const num  = all.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
 
-      // zoradíme: A–Z, potom čísla 0–9
       text.sort((a, b) => a.title.localeCompare(b.title, 'sk'));
       num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
 
@@ -31,18 +31,17 @@ function parseXML() {
 function displayList(list) {
   const listDiv = document.getElementById('song-list');
   listDiv.innerHTML = '';
-  list.forEach(song => {
+  list.forEach((song, index) => {
     const div = document.createElement('div');
-    // číselné bez symbolu – aby boli úplne na konci
-    const isNumber = /^\d+(\.\d+)?$/.test(song.title);
     div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
-    div.onclick = () => showSong(song);
+    div.onclick = () => showSong(song, index);
     listDiv.appendChild(div);
   });
 }
 
-function showSong(song) {
+function showSong(song, index) {
   currentSong = song;
+  currentIndex = index;
   transposeStep = 0;
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
@@ -51,9 +50,9 @@ function showSong(song) {
 }
 
 function renderSong(text) {
-  const content = text.replace(/\[(.*?)\]/g, (match, chord) => {
+  let content = text.replace(/\[(.*?)\]/g, (match, chord) => {
     const transposed = transposeChord(chord, transposeStep);
-    return `<span class="chord">${transposed}</span>`;
+    return chordsVisible ? `<span class="chord">${transposed}</span>` : '';
   });
   document.getElementById('song-content').innerHTML = content;
 }
@@ -81,13 +80,18 @@ function changeFontSize(delta) {
   localStorage.setItem('fontSize', fontSize);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('fontSize');
-  if (saved) {
-    fontSize = parseInt(saved);
-    document.getElementById('song-content').style.fontSize = fontSize + 'px';
+function toggleChords() {
+  chordsVisible = !chordsVisible;
+  document.getElementById('chord-toggle-text').textContent = chordsVisible ? 'Skryť akordy' : 'Zobraziť akordy';
+  renderSong(currentSong.text);
+}
+
+function navigateSong(direction) {
+  const newIndex = currentIndex + direction;
+  if (newIndex >= 0 && newIndex < songs.length) {
+    showSong(songs[newIndex], newIndex);
   }
-});
+}
 
 function backToList() {
   document.getElementById('song-list').style.display = 'block';
@@ -98,6 +102,32 @@ document.getElementById('search').addEventListener('input', e => {
   const query = e.target.value.toLowerCase();
   const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
   displayList(filtered);
+});
+
+document.getElementById('feedback-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const songTitle = currentSong.title;
+  const fromName = this.from_name.value;
+  const message = this.message.value;
+
+  emailjs.send("service_3v6xw9p", "template_d5gfd0a", {
+    song_title: songTitle,
+    from_name: fromName,
+    message: message
+  }).then(() => {
+    alert('Ďakujeme za správu!');
+    this.reset();
+  }, () => {
+    alert('Chyba pri odosielaní.');
+  });
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('fontSize');
+  if (saved) {
+    fontSize = parseInt(saved);
+    document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  }
 });
 
 parseXML();
