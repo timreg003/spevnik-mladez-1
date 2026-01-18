@@ -22,24 +22,46 @@ async function parseXML() {
 
         songs = [...nodes].map(s => {
             const text = s.getElementsByTagName('songtext')[0]?.textContent.trim() || "";
-            const displayId = s.getElementsByTagName('author')[0]?.textContent.trim() || "";
-            let processedId = displayId;
-            if (displayId.startsWith('M')) {
-                const num = displayId.substring(1).replace(/^0+/, '');
-                processedId = "Mariánska " + num;
+            const rawId = s.getElementsByTagName('author')[0]?.textContent.trim() || "";
+            
+            // Premenovanie M001 na Mariánska 1 atď.
+            let displayId = rawId;
+            if (rawId.startsWith('M')) {
+                const num = rawId.substring(1).replace(/^0+/, '');
+                displayId = "Mariánska " + num;
             }
 
             return {
                 id: s.getElementsByTagName('ID')[0]?.textContent.trim(),
                 title: s.getElementsByTagName('title')[0]?.textContent.trim(),
-                originalId: displayId,
-                displayId: processedId,
+                originalId: rawId,
+                displayId: displayId,
                 origText: text,
                 originalKey: (text.match(/\[([A-H][#b]?[m]?)\]/) || [])[1] || '?'
             };
         });
 
-        sortSongs();
+        // TRIEDENIE: Čísla -> Mariánske -> Ostatné texty
+        songs.sort((a, b) => {
+            const aIsNum = /^\d+$/.test(a.originalId);
+            const bIsNum = /^\d+$/.test(b.originalId);
+            const aIsM = a.originalId.startsWith('M');
+            const bIsM = b.originalId.startsWith('M');
+
+            if (aIsNum && !bIsNum) return -1;
+            if (!aIsNum && bIsNum) return 1;
+            if (aIsNum && bIsNum) return parseInt(a.originalId) - parseInt(b.originalId);
+
+            if (aIsM && !bIsM) return -1;
+            if (!aIsM && bIsM) return 1;
+            if (aIsM && bIsM) {
+                const numA = parseInt(a.originalId.substring(1));
+                const numB = parseInt(b.originalId.substring(1));
+                return numA - numB;
+            }
+            return a.originalId.localeCompare(b.originalId);
+        });
+
         filteredSongs = [...songs];
         currentModeList = [...songs];
         renderAllSongs();
@@ -47,28 +69,6 @@ async function parseXML() {
     } catch (e) {
         document.getElementById('piesne-list').innerHTML = 'Chyba pri načítaní dát.';
     }
-}
-
-function sortSongs() {
-    songs.sort((a, b) => {
-        const isNumA = /^\d+$/.test(a.originalId);
-        const isNumB = /^\d+$/.test(b.originalId);
-        const isMA = a.originalId.startsWith('M');
-        const isMB = b.originalId.startsWith('M');
-
-        if (isNumA && !isNumB) return -1;
-        if (!isNumA && isNumB) return 1;
-        if (isNumA && isNumB) return parseInt(a.originalId) - parseInt(b.originalId);
-
-        if (isMA && !isMB) return -1;
-        if (!isMA && isMB) return 1;
-        if (isMA && isMB) {
-            const numA = parseInt(a.originalId.substring(1));
-            const numB = parseInt(b.originalId.substring(1));
-            return numA - numB;
-        }
-        return a.originalId.localeCompare(b.originalId);
-    });
 }
 
 function renderAllSongs() {
@@ -96,7 +96,10 @@ function openSongById(id) {
     document.getElementById('song-detail').style.display = 'block';
     document.getElementById('render-title').innerText = currentSong.displayId + '. ' + currentSong.title;
     document.getElementById('render-key').innerText = 'Tónina: ' + currentSong.originalKey;
+    
+    // Nastavenie predmetu formulára
     document.getElementById('form-subject').value = "Chyba v piesni: " + currentSong.title;
+    
     renderSong();
     window.scrollTo(0,0);
 }
@@ -137,6 +140,49 @@ function resetTranspose() { transposeStep = 0; document.getElementById('transpos
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
 function changeFontSize(dir) { fontSize += dir; renderSong(); }
 
+// FORMULÁR: Odosielanie cez fetch (bez prekliknutia)
+document.addEventListener('submit', async function(e) {
+    if (e.target && e.target.id === 'error-form') {
+        e.preventDefault();
+        const form = e.target;
+        const status = document.getElementById('form-status');
+        const btn = document.getElementById('form-submit-btn');
+        const data = new FormData(form);
+
+        btn.disabled = true;
+        btn.innerText = "ODOSIELAM...";
+
+        try {
+            const response = await fetch('https://formspree.io/f/mvzzkwlw', {
+                method: 'POST',
+                body: data,
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (response.ok) {
+                form.style.display = 'none';
+                status.style.display = 'block';
+                setTimeout(() => {
+                    form.reset();
+                    form.style.display = 'block';
+                    status.style.display = 'none';
+                    btn.disabled = false;
+                    btn.innerText = "ODOSLAŤ";
+                }, 3000);
+            } else {
+                alert("Chyba pri odosielaní.");
+                btn.disabled = false;
+                btn.innerText = "ODOSLAŤ";
+            }
+        } catch (error) {
+            alert("Chyba spojenia.");
+            btn.disabled = false;
+            btn.innerText = "ODOSLAŤ";
+        }
+    }
+});
+
+// ADMIN FUNKCIE (Playlisty)
 function unlockAdmin() {
     const p = prompt('Heslo:');
     if (p === "qwer") {
