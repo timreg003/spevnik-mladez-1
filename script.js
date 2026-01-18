@@ -7,7 +7,7 @@ let scrollInterval = null;
 
 // KONFIGURÁCIA GOOGLE DISKU
 const FILE_ID = '1AyQnmtBzJhTWTPkHzXiqUKYyhRTUA0ZY'; 
-const URL = `https://docs.google.com/uc?export=download&id=${FILE_ID}`;
+const URL = `https://corsproxy.io/?https://docs.google.com/uc?export=download&id=${FILE_ID}`;
 
 // 1. NAČÍTANIE A PARSOVANIE XML
 function parseXML() {
