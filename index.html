@@ -10,8 +10,8 @@
 </head>
 <body>
   <div class="container">
-    <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px;">
-      <i class="fas fa-lock" style="position: absolute; left: 0; opacity: 0.1; cursor: pointer; font-size: 1.2em;" onclick="unlockAdmin()"></i>
+    <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 15px;">
+      <i class="fas fa-lock" style="position: absolute; left: 0; opacity: 0.1; cursor: pointer;" onclick="unlockAdmin()"></i>
       <h1 style="margin: 0;">Mládežnícky spevník NIŽNÁ</h1>
     </div>
 
@@ -21,21 +21,21 @@
       <div id="playlists-section"></div>
 
       <div id="admin-panel" style="display:none; background:#1e1e1e; padding:15px; border-radius:12px; margin-bottom:20px; border:1px solid #00bfff;">
-        <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Vytvoriť program omše</h3>
+        <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Vytvoriť program</h3>
         <div id="selected-list" style="margin-bottom:10px; font-size:14px;"></div>
-        <input type="text" id="playlist-name" placeholder="Názov (napr. Nedeľná omša)" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box; outline:none;">
+        <input type="text" id="playlist-name" placeholder="Názov programu" style="width:100%; padding:10px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
         <button onclick="savePlaylist()" style="width:100%; background:#00bfff; color:black; font-weight:bold; padding:12px; border-radius:8px; border:none; cursor:pointer;">ULOŽIŤ PROGRAM</button>
       </div>
 
-      <h2>Liturgia</h2>
-      <div class="liturgia">
-        </div>
-
-      <h2 id="piesne-title">Piesne</h2>
       <div id="piesne-list">Načítavam piesne...</div>
     </div>
 
     <div id="song-detail" style="display:none;">
+      <div id="top-header" style="text-align:center; margin-bottom:15px;">
+        <h2 id="render-title" style="margin:0; color:#00bfff; font-size:1.6em; border:none;"></h2>
+        <small id="render-key" style="color:#666; font-style:italic;"></small>
+      </div>
+
       <button class="back-btn" onclick="closeSong()"><i class="fas fa-arrow-left"></i> Späť</button>
       
       <div class="controls">
@@ -46,7 +46,6 @@
             <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i></button>
           </div>
         </div>
-
         <div class="control-group">
           <small>Tónina: <span id="transpose-val">0</span></small>
           <div class="btn-row">
@@ -55,7 +54,6 @@
             <button onclick="transposeSong(1)"><i class="fas fa-plus"></i></button>
           </div>
         </div>
-
         <div class="control-group">
           <small>Zobrazenie</small>
           <div class="btn-row">
@@ -66,17 +64,15 @@
         </div>
       </div>
 
-      <div id="song-content"></div>
+      <div id="song-content" style="padding: 10px 0; line-height: 1.6;"></div>
 
       <div class="feedback-section">
-        <p>Ak si našiel/la chybu napíš, opravím :)</p>
         <form id="my-form" class="custom-form">
           <input type="hidden" name="_subject" id="email-subject">
           <input type="text" name="Meno" placeholder="Tvoje meno" required>
           <textarea name="Správa" placeholder="Nájdená chyba..." required></textarea>
           <button type="submit" id="submit-btn" class="submit-btn">Odoslať opravu</button>
         </form>
-        <div id="form-status"></div>
       </div>
     </div>
   </div>
