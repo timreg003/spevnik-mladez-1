@@ -57,6 +57,12 @@ function showSong(song) {
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
   document.getElementById('song-title').textContent = song.title;
+  
+  const chordBtn = document.getElementById('chord-btn');
+  chordBtn.innerHTML = '<i class="fas fa-eye"></i>';
+  chordBtn.style.color = '#fff';
+  chordsVisible = true;
+
   updateTransposeDisplay();
   renderSong(song.text);
   window.scrollTo(0, 0);
@@ -122,7 +128,9 @@ function backToList() {
 
 function toggleChords() {
   chordsVisible = !chordsVisible;
-  document.getElementById('chord-toggle-text').textContent = chordsVisible ? 'Skryť akordy' : 'Zobraziť akordy';
+  const btn = document.getElementById('chord-btn');
+  btn.innerHTML = chordsVisible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+  btn.style.color = chordsVisible ? '#fff' : '#555';
   renderSong(currentSong.text);
 }
 
