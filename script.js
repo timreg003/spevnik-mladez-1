@@ -1,14 +1,10 @@
 let songs = [], filteredSongs = [], currentSong = null, currentModeList = [], selectedSongIds = [];
 let transposeStep = 0, fontSize = 17, chordsVisible = true, isAdmin = false, adminPassword = "";
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwF5BmjnJsRJmHpCIo4aU0v55CPh4LjrVD8xpeJktRAf4eT5dZyZkd1bZCmMlpq5_bfmw/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEfu4yOq0BE4gcr4hOaElvVCNzvmZOSgmbeyy4gOqfIxAhBjRgzDPixYNXbn9_UoXbsw/exec';
 const FORMSPREE_URL = 'https://formspree.io/f/mvzzkwlw';
 
-function formatSongId(id) { 
-    if (/^\d+$/.test(id)) return parseInt(id).toString();
-    if (id.startsWith('M')) return "Mariánska " + parseInt(id.substring(1));
-    return id; 
-}
+function formatSongId(id) { return /^\d+$/.test(id) ? parseInt(id).toString() : id; }
 
 async function parseXML() {
     try {
@@ -17,29 +13,24 @@ async function parseXML() {
         const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
         songs = Array.from(xml.getElementsByTagName('song')).map(s => {
             const txt = s.getElementsByTagName('songtext')[0]?.textContent || "";
-            const auth = s.getElementsByTagName('author')[0]?.textContent || "";
             return {
                 id: s.getElementsByTagName('ID')[0]?.textContent || "",
                 title: s.getElementsByTagName('title')[0]?.textContent || "Bez názvu",
-                displayId: auth,
+                displayId: s.getElementsByTagName('author')[0]?.textContent || "",
                 origText: txt,
                 originalKey: txt.match(/\[([A-H][#b]?[m]?)\]/)?.[1] || "?"
             };
         });
-
-        // Radenie: Čísla -> Mariánska -> Text
-        songs.sort((a, b) => {
-            const idA = a.displayId; const idB = b.displayId;
-            const isNumA = /^\d+$/.test(idA); const isNumB = /^\d+$/.test(idB);
-            const isMarA = idA.startsWith('M'); const isMarB = idB.startsWith('M');
-            if (isNumA && !isNumB) return -1;
-            if (!isNumA && isNumB) return 1;
-            if (isNumA && isNumB) return parseInt(idA) - parseInt(idB);
-            if (isMarA && !isMarB) return -1;
-            if (!isMarA && isMarB) return 1;
-            return idA.localeCompare(idB);
+        // TRIEDENIE: číselné → M-kové (Mariánska) → ostatné texty
+        songs.sort((a,b)=>{
+            const ca=formatSongId(a.displayId), cb=formatSongId(b.displayId);
+            const na=/^\d+$/.test(ca), nb=/^\d+$/.test(cb);
+            const ma=/^M\d+/.test(ca), mb=/^M\d+/.test(cb);
+            if(na && !nb) return -1; if(!na && nb) return 1;
+            if(ma && !mb) return -1; if(!ma && mb) return 1;
+            if(ma && mb) return parseInt(ca.slice(1)) - parseInt(cb.slice(1));
+            return ca.localeCompare(cb,undefined,{numeric:true});
         });
-
         filteredSongs = [...songs];
         renderAllSongs();
         loadPlaylistHeaders();
@@ -50,8 +41,10 @@ function renderAllSongs() {
     currentModeList = filteredSongs;
     document.getElementById('piesne-list').innerHTML = filteredSongs.map(s => {
         const isSel = selectedSongIds.includes(s.id);
+        let niceId = formatSongId(s.displayId);
+        if(/^M\d+/.test(niceId)) niceId = 'Mariánska ' + niceId.slice(1);
         return `<div onclick="${isAdmin ? `addToSelection('${s.id}')` : `openSongById('${s.id}', 'all')`}" style="display:flex; justify-content:space-between; align-items:center; ${isSel?'border-color:#00bfff; background:#1a2a33;':''}">
-            <div><span style="color:#00bfff; font-weight:bold; margin-right:8px;">${formatSongId(s.displayId)}.</span> ${s.title}</div>
+            <div><span style="color:#00bfff; font-weight:bold; margin-right:8px;">${niceId}.</span> ${s.title}</div>
             ${isAdmin ? `<i class="fas ${isSel?'fa-check-circle':'fa-plus-circle'}" style="color:#00bfff; font-size:1.2em;"></i>` : ''}
         </div>`;
     }).join('');
@@ -94,11 +87,13 @@ function openSongById(id, mode) {
     transposeStep = 0;
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
-    document.getElementById('render-title').innerText = formatSongId(currentSong.displayId) + ". " + currentSong.title;
+    const niceId = /^M\d+/.test(formatSongId(s.displayId)) ? 'Mariánska ' + formatSongId(s.displayId).slice(1) : formatSongId(s.displayId);
+    document.getElementById('render-title').innerText = niceId + ". " + currentSong.title;
     document.getElementById('render-key').innerText = "Tónina: " + currentSong.originalKey;
-    document.getElementById('error-msg').value = ""; document.getElementById('error-name').value = "";
+    document.getElementById('error-msg').value = "";
+    document.getElementById('reporter-name').value = "";
     renderSong();
-    window.scrollTo(0,0);
+    window.scrollTo(0, 0);
 }
 
 function renderSong() {
@@ -133,31 +128,41 @@ async function loadPlaylistHeaders() {
 }
 
 async function savePlaylist() {
-    const name = document.getElementById('playlist-name').value;
+    const name = document.getElementById('playlist-name').value.trim();
     if (!name || !selectedSongIds.length) return alert("Názov chýba!");
-    const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
-    try { await fetch(url); alert("Uložené!"); location.reload(); } catch(e) { alert("Chyba pri ukladaní."); }
+    const body = `action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
+    try {
+        const r = await fetch(SCRIPT_URL, {method: 'POST', body, headers: {'Content-Type':'application/x-www-form-urlencoded'}});
+        const t = await r.text();
+        if (t.includes("Uložené")) {
+            selectedSongIds = []; renderSelected(); alert("Uložené!"); location.reload();
+        } else { alert("Chyba: " + t); }
+    } catch(e) { alert("Sieťová chyba"); }
 }
 
 async function deletePlaylist(name) {
     if(!confirm("Zmazať "+name+"?")) return;
-    const url = `${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`;
-    try { await fetch(url); loadPlaylistHeaders(); } catch(e) { alert("Zmazané."); }
+    const body = `action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`;
+    try {
+        const r = await fetch(SCRIPT_URL, {method: 'POST', body, headers: {'Content-Type':'application/x-www-form-urlencoded'}});
+        const t = await r.text();
+        if (t.includes("Zmazané")) loadPlaylistHeaders(); else alert("Chyba: "+t);
+    } catch(e) { alert("Sieťová chyba"); }
 }
 
 async function openPlaylist(name) {
     const res = await fetch(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(name)}&t=${Date.now()}`);
     const ids = (await res.text()).split(',');
     currentModeList = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
-    document.getElementById('piesne-list').innerHTML = `<button onclick="location.reload()" style="width:100%; margin-bottom:10px; background:#2a2a2a; color:#00bfff; padding:12px; border-radius:10px; font-weight:bold; border:1px solid #333;">⬅ SPÄŤ</button>` + 
-        currentModeList.map(s => `<div onclick="openSongById('${s.id}','playlist')"><span style="color:#00bfff; font-weight:bold;">${formatSongId(s.displayId)}.</span> ${s.title}</div>`).join('');
+    document.getElementById('piesne-list').innerHTML = `<button onclick="location.reload()" style="width:100%; margin-bottom:10px; background:#2a2a2a; color:#00bfff; padding:12px; border-radius:10px; font-weight:bold; border:1px solid #333;">⬅ SPÄŤ</button>` +
+        currentModeList.map(s => `<div onclick="openSongById('${s.id}','playlist')"><span style="color:#00bfff; font-weight:bold;">${/^M\d+/.test(formatSongId(s.displayId))?'Mariánska '+formatSongId(s.displayId).slice(1):formatSongId(s.displayId)}.</span> ${s.title}</div>`).join('');
     window.scrollTo(0,0);
 }
 
 function sendErrorReport() {
-    const name = document.getElementById('error-name').value;
-    const msg = document.getElementById('error-msg').value;
+    const msg = document.getElementById('error-msg').value.trim();
     if(!msg) return alert("Napíšte chybu.");
+    const name = document.getElementById('reporter-name').value.trim();
     const btn = document.getElementById('error-btn');
     btn.innerText = "ODOSIELAM..."; btn.disabled = true;
     fetch(FORMSPREE_URL, {
@@ -166,10 +171,9 @@ function sendErrorReport() {
         body: JSON.stringify({ pieseň: currentSong.title, meno: name, správa: msg })
     }).then(() => {
         alert("Nahlásené. Vďaka!");
-        document.getElementById('error-msg').value = ""; document.getElementById('error-name').value = "";
-    }).finally(() => {
-        btn.innerText = "ODOSLAŤ"; btn.disabled = false;
-    });
+        document.getElementById('error-msg').value = "";
+        document.getElementById('reporter-name').value = "";
+    }).finally(() => { btn.innerText = "ODOSLAŤ"; btn.disabled = false; });
 }
 
 function filterSongs() {
@@ -184,8 +188,8 @@ function navigateSong(step) {
 function transposeSong(s) { transposeStep += s; renderSong(); }
 function resetTranspose() { transposeStep = 0; renderSong(); }
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
-function changeFontSize(s) { fontSize += s; renderSong(); }
+function changeFontSize(s) { fontSize = Math.max(10, Math.min(40, fontSize + s)); renderSong(); }
 function closeSong() { document.getElementById('song-list').style.display='block'; document.getElementById('song-detail').style.display='none'; }
-function unlockAdmin() { const p = prompt("Heslo:"); if(p){ adminPassword=p; isAdmin=true; document.getElementById('admin-panel').style.display='block'; renderAllSongs(); loadPlaylistHeaders(); } }
+function unlockAdmin() { const p = prompt("Heslo:"); if(p==='qwer'){ adminPassword=p; isAdmin=true; document.getElementById('admin-panel').style.display='block'; renderAllSongs(); loadPlaylistHeaders(); } else if(p) alert("Zlé heslo"); }
 
 document.addEventListener('DOMContentLoaded', parseXML);
