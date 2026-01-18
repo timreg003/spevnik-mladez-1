@@ -24,16 +24,16 @@ function parseXML() {
       num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
 
       songs = [...text, ...num];
-      displayList(songs);
+      displayPiesne(songs);
     });
 }
 
-function displayList(list) {
-  const listDiv = document.getElementById('song-list');
+function displayPiesne(list) {
+  const listDiv = document.getElementById('piesne-list');
   listDiv.innerHTML = '';
   list.forEach((song, index) => {
     const div = document.createElement('div');
-    div.innerHTML = `<i class="fas fa-music"></i> ${song.title}`;
+    div.textContent = song.title;
     div.onclick = () => showSong(song, index);
     listDiv.appendChild(div);
   });
@@ -47,6 +47,16 @@ function showSong(song, index) {
   document.getElementById('song-display').style.display = 'block';
   document.getElementById('song-title').textContent = song.title;
   renderSong(song.text);
+}
+
+function showSongByTitle(title) {
+  const song = songs.find(s => s.title.toLowerCase() === title.toLowerCase());
+  if (song) {
+    const index = songs.indexOf(song);
+    showSong(song, index);
+  } else {
+    alert('Pieseň nebola nájdená.');
+  }
 }
 
 function renderSong(text) {
@@ -101,7 +111,7 @@ function backToList() {
 document.getElementById('search').addEventListener('input', e => {
   const query = e.target.value.toLowerCase();
   const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
-  displayList(filtered);
+  displayPiesne(filtered);
 });
 
 document.getElementById('feedback-form').addEventListener('submit', function (e) {
@@ -113,7 +123,8 @@ document.getElementById('feedback-form').addEventListener('submit', function (e)
   emailjs.send("service_3v6xw9p", "template_d5gfd0a", {
     song_title: songTitle,
     from_name: fromName,
-    message: message
+    message: message,
+    to_email: "timotejreguly@gmail.com"
   }).then(() => {
     alert('Ďakujeme za správu!');
     this.reset();
@@ -128,6 +139,5 @@ window.addEventListener('DOMContentLoaded', () => {
     fontSize = parseInt(saved);
     document.getElementById('song-content').style.fontSize = fontSize + 'px';
   }
+  parseXML();
 });
-
-parseXML();
