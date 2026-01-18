@@ -3,9 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
-  <meta http-equiv="Pragma" content="no-cache"/>
-  <meta http-equiv="Expires" content="0"/>
   <title>Mládežnícky spevník NIŽNÁ</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -15,9 +12,8 @@
   <div class="container">
     <h1>Mládežnícky spevník NIŽNÁ</h1>
 
-    <input type="text" id="search" placeholder="Hľadať pieseň..." />
-
     <div id="song-list">
+      <input type="text" id="search" placeholder="Hľadať pieseň..." />
       <h2>Liturgia</h2>
       <div class="liturgia">
         <div onclick="openLiturgieSong('Pane zmiluj sa')">Pane zmiluj sa</div>
@@ -26,7 +22,6 @@
         <div onclick="openLiturgieSong('Otče náš')">Otče náš</div>
         <div onclick="openLiturgieSong('Baránok')">Baránok</div>
       </div>
-
       <h2>Piesne</h2>
       <div id="piesne-list"></div>
     </div>
@@ -40,9 +35,9 @@
       </div>
 
       <div class="controls">
-        <button onclick="navigateSong(-1)"><i class="fas fa-chevron-left"></i> Predchádzajúca</button>
-        <button onclick="toggleChords()"><i class="fas fa-guitar"></i> <span id="chord-toggle-text">Skryť akordy</span></button>
-        <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i> Nasledujúca</button>
+        <button onclick="navigateSong(-1)"><i class="fas fa-chevron-left"></i></button>
+        <button onclick="toggleChords()"><span id="chord-toggle-text">Skryť akordy</span></button>
+        <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i></button>
       </div>
 
       <div class="transpose-bar">
@@ -52,15 +47,20 @@
       </div>
 
       <div class="zoom-bar">
-        <button onclick="changeFontSize(-1)"><i class="fas fa-minus"></i></button>
-        <span>Text</span>
-        <button onclick="changeFontSize(1)"><i class="fas fa-plus"></i></button>
+        <button onclick="changeFontSize(-1)"><i class="fas fa-minus"></i> A</button>
+        <button onclick="changeFontSize(1)">A <i class="fas fa-plus"></i></button>
       </div>
 
-      <pre id="song-content"></pre>
+      <div id="song-content"></div>
+
+      <div class="feedback-section">
+        <p>Ak si našiel/la chybu napíš, opravím :)</p>
+        <div class="form-container">
+          <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSeWrDI9dFFVd9pYaqELdYME0raEwVK4ZOJxJWv0800HfWxaxA/viewform?embedded=true" width="100%" height="600" frameborder="0" marginheight="0" marginwidth="0">Načítava sa…</iframe>
+        </div>
+      </div>
     </div>
   </div>
-
   <script src="script.js"></script>
 </body>
 </html>
