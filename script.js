@@ -4,7 +4,8 @@ let currentIndex = 0;
 let transposeStep = 0;
 let fontSize = 17;
 let chordsVisible = true;
-let currentGroup = 'piesne'; // 'liturgia' alebo 'piesne'
+let currentGroup = 'piesne';
+let baseKey = 'C'; // základná tónina – určíme z prvého akordu
 
 function parseXML() {
   fetch('export.zpk.xml')
@@ -47,39 +48,36 @@ function showSong(song, index) {
   currentSong = song;
   currentIndex = index;
   transposeStep = 0;
+
+  // Urč základnú tóninu z prvého akordu
+  const firstChord = song.text.match(/\[(.*?)\]/);
+  baseKey = firstChord ? firstChord[1].match(/[A-G][#b]?/)?.[0] || 'C' : 'C';
+
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
   document.getElementById('song-title').textContent = song.title;
+  updateTransposeDisplay();
   renderSong(song.text);
 }
 
-function showSongByTitle(title) {
+function showAllByTitle(title) {
   const matches = songs.filter(s => s.title.toLowerCase() === title.toLowerCase());
-  if (matches.length === 0) {
-    alert('Pieseň nebola nájdená.');
-    return;
-  }
-  if (matches.length === 1) {
-    currentGroup = 'liturgia';
-    const index = songs.indexOf(matches[0]);
-    showSong(matches[0], index);
-  } else {
-    // Viac piesní – zobrazíme ich ako zoznam
-    const listDiv = document.getElementById('song-list');
-    listDiv.innerHTML = `<h2>Výber piesne: ${title}</h2>`;
-    matches.forEach((song, idx) => {
-      const div = document.createElement('div');
-      div.textContent = `${song.title} (${idx + 1})`;
-      div.onclick = () => {
-        currentGroup = 'liturgia';
-        const globalIndex = songs.indexOf(song);
-        showSong(song, globalIndex);
-      };
-      listDiv.appendChild(div);
-    });
-    document.getElementById('song-display').style.display = 'none';
-    document.getElementById('song-list').style.display = 'block';
-  }
+  if (matches.length === 0) return;
+
+  currentGroup = 'liturgia';
+  const listDiv = document.getElementById('song-list');
+  listDiv.innerHTML = `<h2>${title}</h2>`;
+  matches.forEach((song, idx) => {
+    const div = document.createElement('div');
+    div.textContent = `${song.title} (${idx + 1})`;
+    div.onclick = () => {
+      const globalIndex = songs.indexOf(song);
+      showSong(song, globalIndex);
+    };
+    listDiv.appendChild(div);
+  });
+  document.getElementById('song-display').style.display = 'none';
+  document.getElementById('song-list').style.display = 'block';
 }
 
 function renderSong(text) {
@@ -104,7 +102,13 @@ function transposeChord(chord, steps) {
 
 function transposeSong(direction) {
   transposeStep += direction;
+  updateTransposeDisplay();
   renderSong(currentSong.text);
+}
+
+function updateTransposeDisplay() {
+  document.getElementById('base-key').textContent = baseKey;
+  document.getElementById('transpose-offset').textContent = transposeStep > 0 ? `+${transposeStep}` : transposeStep;
 }
 
 function changeFontSize(delta) {
@@ -120,10 +124,11 @@ function toggleChords() {
 }
 
 function getCurrentGroupSongs() {
-  const liturgiaTitles = ['Pane zmiluj sa', 'Aleluja', 'Baránok', 'Svätý', 'Otče náš'];
+  const poradie = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
   if (currentGroup === 'liturgia') {
-    return songs.filter(s => liturgiaTitles.includes(s.title));
+    return poradie.map(title => songs.find(s => s.title.toLowerCase() === title.toLowerCase())).filter(Boolean);
   }
+  const liturgiaTitles = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
   return songs.filter(s => !liturgiaTitles.includes(s.title));
 }
 
@@ -141,7 +146,7 @@ function navigateSong(direction) {
 function backToList() {
   document.getElementById('song-list').style.display = 'block';
   document.getElementById('song-display').style.display = 'none';
-  parseXML(); // obnoví pôvodný zoznam
+  parseXML();
 }
 
 document.getElementById('search').addEventListener('input', e => {
