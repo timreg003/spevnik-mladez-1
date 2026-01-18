@@ -36,8 +36,11 @@
       <div class="song-header-card">
         <h2 id="song-title"></h2>
         <div class="song-meta">
-          <span><i class="fas fa-music"></i> <span id="base-key">C</span></span>
-          <span><i class="fas fa-arrows-alt-v"></i> <span id="transpose-offset">0</span></span>
+          <span title="Pôvodná tónina"><i class="fas fa-music"></i> <span id="base-key">C</span></span>
+          <span title="Aktuálny posun"><i class="fas fa-arrows-alt-v"></i> <span id="transpose-offset">0</span></span>
+          <button onclick="resetTranspose()" class="reset-btn" title="Vrátiť na základnú tóninu">
+            <i class="fas fa-undo"></i> Reset
+          </button>
         </div>
       </div>
 
