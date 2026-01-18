@@ -49,8 +49,13 @@ function showSong(song, index) {
   currentIndex = index;
   transposeStep = 0;
 
-  const firstChord = song.text.match(/\[(.*?)\]/);
-  baseKey = firstChord ? firstChord[1].match(/[A-G][#b]?/)?.[0] || 'C' : 'C';
+  const firstChordMatch = song.text.match(/\[(.*?)\]/);
+  if (firstChordMatch) {
+    const rootMatch = firstChordMatch[1].match(/[A-H][#b]?/);
+    baseKey = rootMatch ? rootMatch[0] : 'C';
+  } else {
+    baseKey = 'C';
+  }
 
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-display').style.display = 'block';
@@ -77,34 +82,38 @@ function renderSong(text) {
   document.getElementById('song-content').innerHTML = content;
 }
 
+// TRANSPZÍCIA: Hm -> Cm pri +1, používa # a slovenské H
 function transposeChord(chord, steps) {
-  const chromaticSharp = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
+  if (steps === 0) return chord;
 
-  // H → B, Db → C#, Eb → D#, Gb → F#, Ab → G#, Bb → A# (pre transpozíciu)
-  let normalized = chord
-    .replace(/H/g, 'B')
-    .replace(/Bb/g, 'A#')
-    .replace(/Db/g, 'C#')
-    .replace(/Eb/g, 'D#')
-    .replace(/Gb/g, 'F#')
-    .replace(/Ab/g, 'G#');
+  // Chromatická stupnica s krížikmi a slovenským H
+  const scale = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
 
-  const root = normalized.match(/[A-G][#b]?/);
-  if (!root) return chord;
+  // Regex upravený na A-H
+  const rootMatch = chord.match(/^([A-H][#b]?)/);
+  if (!rootMatch) return chord;
 
-  const rootOnly = root[0];
-  const suffix = normalized.replace(rootOnly, '');
+  const root = rootMatch[1];
+  const suffix = chord.substring(root.length);
 
-  const index = chromaticSharp.indexOf(rootOnly);
-  if (index === -1) return chord;
+  // Prevod vstupných tónov na index v stupnici (vrátane béčok na krížiky)
+  const mapToIndex = {
+    'C': 0, 'C#': 1, 'Db': 1,
+    'D': 2, 'D#': 3, 'Eb': 3,
+    'E': 4,
+    'F': 5, 'F#': 6, 'Gb': 6,
+    'G': 7, 'G#': 8, 'Ab': 8,
+    'A': 9, 'A#': 10, 'Bb': 10, 'B': 10,
+    'H': 11, 'Cb': 11
+  };
 
-  const newIndex = (index + steps + 12) % 12;
-  const newRoot = chromaticSharp[newIndex];
+  let index = mapToIndex[root];
+  if (index === undefined) return chord;
 
-  // B → H (pre výstup)
-  const finalRoot = newRoot === 'B' ? 'H' : newRoot;
+  const newIndex = (index + steps + 120) % 12; // 120 pre istotu pri veľkých mínusoch
+  const newRoot = scale[newIndex];
 
-  return finalRoot + suffix;
+  return newRoot + suffix;
 }
 
 function transposeSong(direction) {
@@ -119,7 +128,7 @@ function updateTransposeDisplay() {
 }
 
 function changeFontSize(delta) {
-  fontSize = Math.max(12, Math.min(28, fontSize + delta));
+  fontSize = Math.max(12, Math.min(35, fontSize + delta));
   document.getElementById('song-content').style.fontSize = fontSize + 'px';
   localStorage.setItem('fontSize', fontSize);
 }
@@ -155,7 +164,7 @@ function navigateSong(direction) {
 function backToList() {
   document.getElementById('song-list').style.display = 'block';
   document.getElementById('song-display').style.display = 'none';
-  parseXML();
+  // ODSTRÁNENÉ: parseXML() - aby sa dizajn pri návrate neresetoval
 }
 
 document.getElementById('search').addEventListener('input', e => {
