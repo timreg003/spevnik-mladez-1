@@ -6,13 +6,9 @@ let chordsVisible = true;
 let currentGroup = 'piesne';
 let baseKey = 'C';
 
-// 1. NAČÍTANIE PIESNÍ
 function parseXML() {
   fetch('export.zpk.xml')
-    .then(res => {
-      if (!res.ok) throw new Error('Súbor export.zpk.xml nenájdený');
-      return res.text();
-    })
+    .then(res => res.text())
     .then(xmlText => {
       const parser = new DOMParser();
       const xml = parser.parseFromString(xmlText, 'application/xml');
@@ -31,26 +27,21 @@ function parseXML() {
 
       songs = [...text, ...num];
       displayPiesne(songs);
-    })
-    .catch(err => console.error("Chyba pri načítaní:", err));
+    });
 }
 
 function displayPiesne(list) {
   const listDiv = document.getElementById('piesne-list');
   if (!listDiv) return;
   listDiv.innerHTML = '';
-  list.forEach((song) => {
+  list.forEach(song => {
     const div = document.createElement('div');
     div.textContent = song.title;
-    div.onclick = () => {
-      currentGroup = 'piesne';
-      showSong(song);
-    };
+    div.onclick = () => { currentGroup = 'piesne'; showSong(song); };
     listDiv.appendChild(div);
   });
 }
 
-// 2. ZOBRAZENIE PIESNE
 function showSong(song) {
   currentSong = song;
   transposeStep = 0;
@@ -72,46 +63,13 @@ function showSong(song) {
 }
 
 function renderSong(text) {
-  const contentDiv = document.getElementById('song-content');
-  if (!contentDiv) return;
-  
   let content = text.replace(/\[(.*?)\]/g, (match, chord) => {
     const transposed = transposeChord(chord, transposeStep);
     return chordsVisible ? `<span class="chord">${transposed}</span>` : '';
   });
-  contentDiv.innerHTML = content;
+  document.getElementById('song-content').innerHTML = content;
 }
 
-// 3. LOGIKA LITURGIE A NAVIGÁCIE
-function openLiturgieSong(title) {
-  const matches = songs.filter(s => s.title.toLowerCase() === title.toLowerCase());
-  if (matches.length === 0) return;
-
-  currentGroup = 'liturgia';
-  showSong(matches[0]);
-}
-
-function getCurrentGroupSongs() {
-  const poradie = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
-  if (currentGroup === 'liturgia') {
-    return poradie
-      .map(title => songs.find(s => s.title.toLowerCase() === title.toLowerCase()))
-      .filter(Boolean);
-  }
-  return songs.filter(s => !poradie.map(p => p.toLowerCase()).includes(s.title.toLowerCase()));
-}
-
-function navigateSong(direction) {
-  const group = getCurrentGroupSongs();
-  const indexInGroup = group.indexOf(currentSong);
-  const newIndex = indexInGroup + direction;
-  
-  if (newIndex >= 0 && newIndex < group.length) {
-    showSong(group[newIndex]);
-  }
-}
-
-// 4. TRANSPOZÍCIA (Hm oprava + limit 12)
 function transposeChord(chord, steps) {
   if (steps === 0) return chord;
   const scale = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
@@ -121,8 +79,9 @@ function transposeChord(chord, steps) {
   const root = rootMatch[1];
   const suffix = chord.substring(root.length);
   const mapToIndex = {
-    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6,
-    'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 10, 'H': 11, 'Cb': 11
+    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+    'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
+    'A': 9, 'A#': 10, 'Bb': 10, 'B': 10, 'H': 11, 'Cb': 11
   };
 
   let index = mapToIndex[root];
@@ -141,10 +100,19 @@ function transposeSong(direction) {
   }
 }
 
-// 5. POMOCNÉ FUNKCIE
-function updateTransposeDisplay() {
-  document.getElementById('base-key').textContent = baseKey;
-  document.getElementById('transpose-offset').textContent = transposeStep > 0 ? `+${transposeStep}` : transposeStep;
+function openLiturgieSong(title) {
+  const match = songs.find(s => s.title.toLowerCase() === title.toLowerCase());
+  if (match) { currentGroup = 'liturgia'; showSong(match); }
+}
+
+function navigateSong(direction) {
+  const poradie = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
+  let group = currentGroup === 'liturgia' 
+    ? poradie.map(t => songs.find(s => s.title.toLowerCase() === t.toLowerCase())).filter(Boolean)
+    : songs.filter(s => !poradie.map(p => p.toLowerCase()).includes(s.title.toLowerCase()));
+  
+  let idx = group.indexOf(currentSong);
+  if (idx !== -1 && group[idx + direction]) showSong(group[idx + direction]);
 }
 
 function backToList() {
@@ -158,25 +126,19 @@ function toggleChords() {
   renderSong(currentSong.text);
 }
 
-function changeFontSize(delta) {
-  fontSize = Math.max(12, Math.min(35, fontSize + delta));
-  const content = document.getElementById('song-content');
-  if (content) content.style.fontSize = fontSize + 'px';
-  localStorage.setItem('fontSize', fontSize);
+function updateTransposeDisplay() {
+  document.getElementById('base-key').textContent = baseKey;
+  document.getElementById('transpose-offset').textContent = transposeStep > 0 ? `+${transposeStep}` : transposeStep;
 }
 
-document.getElementById('search').addEventListener('input', e => {
+function changeFontSize(delta) {
+  fontSize = Math.max(12, Math.min(35, fontSize + delta));
+  document.getElementById('song-content').style.fontSize = fontSize + 'px';
+}
+
+document.getElementById('search')?.addEventListener('input', e => {
   const query = e.target.value.toLowerCase();
-  const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
-  displayPiesne(filtered);
+  displayPiesne(songs.filter(s => s.title.toLowerCase().includes(query)));
 });
 
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('fontSize');
-  if (saved) {
-    fontSize = parseInt(saved);
-    const content = document.getElementById('song-content');
-    if(content) content.style.fontSize = fontSize + 'px';
-  }
-  parseXML();
-});
+window.addEventListener('DOMContentLoaded', parseXML);
