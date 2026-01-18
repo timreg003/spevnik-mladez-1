@@ -9,7 +9,6 @@ let adminPassword = "";
 let isPlaylistMode = false;
 let currentPlaylistSongs = [];
 
-// TVOJA ADRESA JE UŽ TU VLOŽENÁ:
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEfu4yOq0BE4gcr4hOaElvVCNzvmZOSgmbeyy4gOqfIxAhBjRgzDPixYNXbn9_UoXbsw/exec'; 
 
 function init() {
@@ -29,16 +28,28 @@ function init() {
             const newSongs = Array.from(songNodes).map(song => {
                 const getVal = (t) => song.getElementsByTagName(t)[0]?.textContent.trim() || "";
                 const author = getVal('author');
-                let sortPriority = 3, sortNum = 0, displayId = author;
+                const title = getVal('title').toLowerCase();
+                
+                let sortPriority = 4; // Predvolené: Ostatné
+                let sortNum = 0;
+                let displayId = author;
 
-                if (author.startsWith('M')) {
+                // 1. LITURGIA (Pevne definované názvy)
+                const liturgiaSlova = ["pane zmiluj sa", "aleluja", "svätý", "otče náš", "baránok"];
+                if (liturgiaSlova.some(word => title.includes(word))) {
+                    sortPriority = 1;
+                } 
+                // 2. PIESNE (Čísla v author)
+                else if (/^\d+$/.test(author)) {
                     sortPriority = 2;
+                    sortNum = parseInt(author);
+                    displayId = author;
+                }
+                // 3. MARIÁNSKE (M v author)
+                else if (author.startsWith('M')) {
+                    sortPriority = 3;
                     sortNum = parseInt(author.replace(/\D/g, '')) || 0;
                     displayId = "M " + sortNum;
-                } else if (/^\d+$/.test(author)) {
-                    sortPriority = 1;
-                    sortNum = parseInt(author);
-                    displayId = sortNum.toString();
                 }
 
                 return {
@@ -53,7 +64,7 @@ function init() {
 
             newSongs.sort((a, b) => {
                 if (a.sortPriority !== b.sortPriority) return a.sortPriority - b.sortPriority;
-                if (a.sortPriority < 3) return a.sortNum - b.sortNum;
+                if (a.sortPriority === 2 || a.sortPriority === 3) return a.sortNum - b.sortNum;
                 return a.title.localeCompare(b.title, 'sk');
             });
 
@@ -65,16 +76,36 @@ function init() {
             loadPlaylistHeaders();
         })
         .catch(err => {
-            if (!songs.length) document.getElementById('piesne-list').innerHTML = "Chyba načítania. Skontroluj internet.";
+            if (!songs.length) document.getElementById('piesne-list').innerHTML = "Chyba načítania.";
         });
 }
 
 function renderList(list) {
     const container = document.getElementById('piesne-list');
-    let html = isPlaylistMode ? `<button onclick="showAllSongs()" style="width:100%; margin-bottom:15px; background:#444; padding:15px; border-radius:8px; color:white; border:none; font-weight:bold;">⬅ Späť na všetky piesne</button>` : "";
+    let html = "";
 
-    html += list.map((s) => {
-        const originalIdx = (isPlaylistMode ? currentPlaylistSongs : songs).findIndex(x => x.id === s.id);
+    if (isPlaylistMode) {
+        html += `<button onclick="showAllSongs()" style="width:100%; margin-bottom:15px; background:#444; padding:15px; border-radius:8px; color:white; border:none; font-weight:bold;">⬅ Späť na všetky piesne</button>`;
+        html += `<h3>Zvolený playlist</h3>`;
+        html += generateItemsHtml(list);
+    } else {
+        const liturgia = list.filter(s => s.sortPriority === 1);
+        const piesne = list.filter(s => s.sortPriority === 2);
+        const marianske = list.filter(s => s.sortPriority === 3);
+        const ostatne = list.filter(s => s.sortPriority === 4);
+
+        if (liturgia.length > 0) html += `<h3>Liturgia</h3>` + generateItemsHtml(liturgia);
+        if (piesne.length > 0) html += `<h3>Piesne</h3>` + generateItemsHtml(piesne);
+        if (marianske.length > 0) html += `<h3>Mariánske</h3>` + generateItemsHtml(marianske);
+        if (ostatne.length > 0) html += `<h3>Ostatné</h3>` + generateItemsHtml(ostatne);
+    }
+    
+    container.innerHTML = html;
+}
+
+function generateItemsHtml(items) {
+    return items.map((s) => {
+        const originalIdx = songs.findIndex(x => x.id === s.id);
         return `
         <div class="song-item">
             <div class="song-info" onclick="openSongByIndex(${originalIdx})">
@@ -83,13 +114,11 @@ function renderList(list) {
             ${isAdmin ? `<button class="add-btn" onclick="addToSelection('${s.id}')">+</button>` : ''}
         </div>`;
     }).join('');
-    container.innerHTML = html;
 }
 
-function showAllSongs() {
-    isPlaylistMode = false;
-    renderList(songs);
-}
+// ... (Zvyšok funkcií: showAllSongs, openPlaylist, unlockAdmin, atď. zostáva rovnaký ako v predošlom kóde)
+
+function showAllSongs() { isPlaylistMode = false; renderList(songs); }
 
 function openPlaylist(name) {
     fetch(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(name)}&t=${Date.now()}`)
@@ -105,12 +134,7 @@ function openPlaylist(name) {
 
 function unlockAdmin() {
     const p = prompt("Zadaj heslo pre úpravy:");
-    if (p) { 
-        adminPassword = p; 
-        isAdmin = true; 
-        document.getElementById('admin-panel').style.display = 'block'; 
-        renderList(isPlaylistMode ? currentPlaylistSongs : songs); 
-    }
+    if (p) { adminPassword = p; isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderList(songs); }
 }
 
 function addToSelection(id) { if (!selectedSongIds.includes(id)) { selectedSongIds.push(id); renderSelection(); } }
