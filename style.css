@@ -6,7 +6,6 @@ h1 { font-size: 1.8em; font-weight: 700; background: linear-gradient(90deg, #00b
 h2 { color: #00bfff; margin-top: 15px; font-size: 1.3em; border-bottom: 1px solid #333; padding-bottom: 5px; }
 .controls { display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px; border-radius: 12px; margin-bottom: 10px; gap: 10px; border: 1px solid #333; }
 .control-group { display: flex; flex-direction: column; gap: 5px; align-items: center; }
-.control-group small { color: #888; text-transform: uppercase; font-size: 10px; }
 .btn-row { display: flex; background: #1e1e1e; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
 button { background: #1e1e1e; border: none; color: #fff; padding: 8px 12px; cursor: pointer; }
 .back-btn { background: none; color: #aaa; font-size: 16px; border: none; cursor: pointer; margin-bottom: 10px; }
