@@ -6,12 +6,11 @@ let chordsVisible = true;
 let currentGroup = 'piesne';
 let baseKey = 'C';
 
-// Funkcia na načítanie XML
+// 1. NAČÍTANIE PIESNÍ
 function parseXML() {
-  console.log("Sťahujem XML...");
   fetch('export.zpk.xml')
     .then(res => {
-      if (!res.ok) throw new Error('Nepodarilo sa načítať XML súbor');
+      if (!res.ok) throw new Error('Súbor export.zpk.xml nenájdený');
       return res.text();
     })
     .then(xmlText => {
@@ -19,14 +18,11 @@ function parseXML() {
       const xml = parser.parseFromString(xmlText, 'application/xml');
       const songNodes = xml.querySelectorAll('song');
       
-      if (songNodes.length === 0) console.error("V XML sa nenašli žiadne piesne!");
-
       const all = Array.from(songNodes).map(song => ({
         title: song.querySelector('title')?.textContent.trim() || "Bez názvu",
         text: song.querySelector('songtext')?.textContent.trim() || ""
       }));
 
-      // Rozdelenie na textové a číslované
       const text = all.filter(s => !/^\d+(\.\d+)?$/.test(s.title));
       const num  = all.filter(s =>  /^\d+(\.\d+)?$/.test(s.title));
 
@@ -34,28 +30,28 @@ function parseXML() {
       num.sort((a, b) => parseFloat(a.title) - parseFloat(b.title));
 
       songs = [...text, ...num];
-      console.log("Načítaných piesní:", songs.length);
       displayPiesne(songs);
     })
-    .catch(err => console.error("Chyba:", err));
+    .catch(err => console.error("Chyba pri načítaní:", err));
 }
 
 function displayPiesne(list) {
   const listDiv = document.getElementById('piesne-list');
   if (!listDiv) return;
   listDiv.innerHTML = '';
-  list.forEach((song, index) => {
+  list.forEach((song) => {
     const div = document.createElement('div');
     div.textContent = song.title;
     div.onclick = () => {
       currentGroup = 'piesne';
-      showSong(song, index);
+      showSong(song);
     };
     listDiv.appendChild(div);
   });
 }
 
-function showSong(song, index) {
+// 2. ZOBRAZENIE PIESNE
+function showSong(song) {
   currentSong = song;
   transposeStep = 0;
 
@@ -86,6 +82,36 @@ function renderSong(text) {
   contentDiv.innerHTML = content;
 }
 
+// 3. LOGIKA LITURGIE A NAVIGÁCIE
+function openLiturgieSong(title) {
+  const matches = songs.filter(s => s.title.toLowerCase() === title.toLowerCase());
+  if (matches.length === 0) return;
+
+  currentGroup = 'liturgia';
+  showSong(matches[0]);
+}
+
+function getCurrentGroupSongs() {
+  const poradie = ['Pane zmiluj sa', 'Aleluja', 'Svätý', 'Otče náš', 'Baránok'];
+  if (currentGroup === 'liturgia') {
+    return poradie
+      .map(title => songs.find(s => s.title.toLowerCase() === title.toLowerCase()))
+      .filter(Boolean);
+  }
+  return songs.filter(s => !poradie.map(p => p.toLowerCase()).includes(s.title.toLowerCase()));
+}
+
+function navigateSong(direction) {
+  const group = getCurrentGroupSongs();
+  const indexInGroup = group.indexOf(currentSong);
+  const newIndex = indexInGroup + direction;
+  
+  if (newIndex >= 0 && newIndex < group.length) {
+    showSong(group[newIndex]);
+  }
+}
+
+// 4. TRANSPOZÍCIA (Hm oprava + limit 12)
 function transposeChord(chord, steps) {
   if (steps === 0) return chord;
   const scale = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
@@ -115,6 +141,7 @@ function transposeSong(direction) {
   }
 }
 
+// 5. POMOCNÉ FUNKCIE
 function updateTransposeDisplay() {
   document.getElementById('base-key').textContent = baseKey;
   document.getElementById('transpose-offset').textContent = transposeStep > 0 ? `+${transposeStep}` : transposeStep;
@@ -133,18 +160,23 @@ function toggleChords() {
 
 function changeFontSize(delta) {
   fontSize = Math.max(12, Math.min(35, fontSize + delta));
-  document.getElementById('song-content').style.fontSize = fontSize + 'px';
+  const content = document.getElementById('song-content');
+  if (content) content.style.fontSize = fontSize + 'px';
   localStorage.setItem('fontSize', fontSize);
 }
 
-// Vyhľadávanie
 document.getElementById('search').addEventListener('input', e => {
   const query = e.target.value.toLowerCase();
   const filtered = songs.filter(s => s.title.toLowerCase().includes(query));
   displayPiesne(filtered);
 });
 
-// Štart aplikácie
 window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('fontSize');
+  if (saved) {
+    fontSize = parseInt(saved);
+    const content = document.getElementById('song-content');
+    if(content) content.style.fontSize = fontSize + 'px';
+  }
   parseXML();
 });
