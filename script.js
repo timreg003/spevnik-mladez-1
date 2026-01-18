@@ -13,7 +13,6 @@ let adminPassword = "";
 
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 
-/* ================== XML ================== */
 async function parseXML() {
     try {
         const res = await fetch(SCRIPT_URL + '?t=' + Date.now());
@@ -36,11 +35,10 @@ async function parseXML() {
         renderAllSongs();
         loadPlaylistHeaders();
     } catch (e) {
-        document.getElementById('piesne-list').innerHTML = 'Chyba pri načítaní: ' + e.message;
+        document.getElementById('piesne-list').innerHTML = 'Chyba pri načítaní dát.';
     }
 }
 
-/* ================== RENDER ================== */
 function renderAllSongs() {
     const el = document.getElementById('piesne-list');
     currentModeList = filteredSongs;
@@ -49,7 +47,7 @@ function renderAllSongs() {
         return `
         <div style="display:flex; justify-content:space-between; align-items:center; ${isSelected}" onclick="openSongById('${s.id}')">
             <span><span style="color:#00bfff;font-weight:bold;">${s.displayId}.</span> ${s.title}</span>
-            ${isAdmin ? `<button onclick="event.stopPropagation(); addToSelection('${s.id}')" style="background:#333; border-radius:4px; padding:4px 8px;">+</button>` : ''}
+            ${isAdmin ? `<button onclick="event.stopPropagation(); addToSelection('${s.id}')" style="background:#333; color:white; border-radius:4px; padding:4px 8px;">+</button>` : ''}
         </div>`;
     }).join('');
 }
@@ -60,7 +58,6 @@ function filterSongs() {
     renderAllSongs();
 }
 
-/* ================== SONG DETAIL ================== */
 function openSongById(id) {
     const found = songs.find(s => s.id === id);
     if (!found) return;
@@ -94,12 +91,10 @@ function renderSong() {
     content.style.fontSize = fontSize + 'px';
 }
 
-/* ================== TRANSPOZÍCIA ================== */
 function transposeChord(chord, step) {
     return chord.replace(/[A-H][#b]?/g, (note) => {
-        let idx = scale.indexOf(note.replace('B', 'B').replace('H', 'H')); 
-        if (note === 'B') idx = 10;
-        if (note === 'H') idx = 11;
+        let n = note === 'B' ? 'B' : (note === 'H' ? 'H' : note);
+        let idx = scale.indexOf(n);
         if (idx === -1) return note;
         let newIdx = (idx + step) % 12;
         while (newIdx < 0) newIdx += 12;
@@ -135,14 +130,16 @@ function navigateSong(dir) {
     if (next) openSongById(next.id);
 }
 
-/* ================== ADMIN LOGIKA ================== */
 function unlockAdmin() {
     const p = prompt('Heslo:');
-    if (p) {
+    if (p === "qwer") { // Overenie zjednoteného hesla
         adminPassword = p;
         isAdmin = true;
         document.getElementById('admin-panel').style.display = 'block';
         renderAllSongs();
+        alert('Admin prístup povolený');
+    } else if (p !== null) {
+        alert('Nesprávne heslo');
     }
 }
 
@@ -169,15 +166,12 @@ function loadPlaylistHeaders() {
         .then(r => r.json())
         .then(d => {
             const sect = document.getElementById('playlists-section');
-            if (d.length === 0) {
-                sect.innerHTML = "";
-                return;
-            }
-            sect.innerHTML = '<h2>PLAYLISTY</h2>' + d.map(p => 
+            if (!d || d.length === 0) return;
+            sect.innerHTML = '<h2>PROGRAMY</h2>' + d.map(p => 
                 `<div onclick="openPlaylist('${p.name}')">📄 ${p.name}</div>`
             ).join('');
         })
-        .catch(e => console.log("Zatiaľ žiadne playlisty"));
+        .catch(() => {});
 }
 
 function openPlaylist(name) {
@@ -187,12 +181,11 @@ function openPlaylist(name) {
             const ids = t.split(',');
             currentModeList = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
             document.getElementById('piesne-list').innerHTML = 
-                `<div style="color:#666; margin-bottom:10px;">Program: <b>${name}</b> | <a href="#" onclick="location.reload()" style="color:#00bfff;">Zrušiť</a></div>` +
+                `<div style="color:#00bfff; margin-bottom:10px; font-weight:bold;">Zobrazený program: ${name} <button onclick="location.reload()" style="background:none; color:#ff4444; border:1px solid #ff4444; margin-left:10px; padding:2px 5px; border-radius:4px;">Zrušiť</button></div>` +
                 currentModeList.map(s => `
                 <div onclick="openSongById('${s.id}')">
                     <span style="color:#00bfff;font-weight:bold;">${s.displayId}.</span> ${s.title}
                 </div>`).join('');
-            window.scrollTo(0,0);
         });
 }
 
