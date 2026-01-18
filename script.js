@@ -27,6 +27,7 @@ async function parseXML() {
             };
         });
 
+        // RADENIE: Čísla -> Mariánske -> Text
         songs.sort((a, b) => {
             const idA = a.displayId;
             const idB = b.displayId;
@@ -46,7 +47,10 @@ async function parseXML() {
         filteredSongs = [...songs];
         renderAllSongs();
         loadPlaylistHeaders();
-    } catch (e) { document.getElementById('piesne-list').innerText = "Chyba pripojenia."; }
+    } catch (e) { 
+        console.error(e);
+        document.getElementById('piesne-list').innerText = "Chyba pripojenia."; 
+    }
 }
 
 function renderAllSongs() {
@@ -141,7 +145,7 @@ async function savePlaylist() {
     if (!name || !selectedSongIds.length) return alert("Názov chýba!");
     const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
     try {
-        await fetch(url);
+        const r = await fetch(url);
         alert("Uložené!");
         location.reload();
     } catch(e) { alert("Chyba pri ukladaní."); }
