@@ -74,7 +74,6 @@ function openSongById(id, mode) {
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
     
-    // Nastavenie nadpisu a tóniny na VRCH
     document.getElementById('render-title').innerText = (currentSong.displayId ? currentSong.displayId + '. ' : '') + currentSong.title;
     document.getElementById('render-key').innerText = "Pôvodná tónina: " + currentSong.originalKey;
     
@@ -94,24 +93,27 @@ function renderSong() {
 }
 
 function navigateSong(step) {
-    const list = (currentMode === "playlist") ? currentPlaylist : currentModeList;
+    const list = (currentMode === "playlist") ? currentPlaylist : (currentMode === "liturgia" ? currentModeList : songs);
     const currIdx = list.findIndex(s => s.id === currentSong.id);
     const nextIdx = currIdx + step;
     if (nextIdx >= 0 && nextIdx < list.length) openSongById(list[nextIdx].id);
 }
 
 function transposeSong(step) {
-  transposeStep += step;
-  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'B', 'H'];
-  const trans = (c) => c.replace(/[A-H][#b]?/g, m => {
-    let n = (m==='Bb'||m==='Hb') ? 'B' : m;
-    let i = notes.indexOf(n);
-    if (i===-1) return m;
-    let ni = (i+step)%12; while(ni<0) ni+=12;
-    return notes[ni];
-  });
-  currentSong.text = currentSong.origText.replace(/\[(.*?)\]/g, (m, c) => `[${trans(c)}]`);
-  renderSong();
+  const newStep = transposeStep + step;
+  if (newStep >= -12 && newStep <= 12) {
+    transposeStep = newStep;
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'B', 'H'];
+    const trans = (c) => c.replace(/[A-H][#b]?/g, m => {
+      let n = (m==='Bb'||m==='Hb') ? 'B' : m;
+      let i = notes.indexOf(n);
+      if (i===-1) return m;
+      let ni = (i+step)%12; while(ni<0) ni+=12;
+      return notes[ni];
+    });
+    currentSong.text = currentSong.origText.replace(/\[(.*?)\]/g, (m, c) => `[${trans(c)}]`);
+    renderSong();
+  }
 }
 
 function resetTranspose() { transposeStep = 0; currentSong.text = currentSong.origText; renderSong(); }
@@ -149,24 +151,20 @@ function moveInSelection(i, d) {
 function savePlaylist() {
   const name = document.getElementById('playlist-name').value;
   if (!name || !selectedSongIds.length) return alert("Zadaj názov!");
+  const finalUrl = `${SCRIPT_URL.split('?')[0]}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
   
-  const finalUrl = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}&content=${selectedSongIds.join(',')}`;
-  
-  // Obídenie CORS pomocou otvorenia v malom okne/iframe, ktorý sa sám zavrie
   const win = window.open(finalUrl, '_blank', 'width=1,height=1');
   setTimeout(() => {
       if(win) win.close();
       alert("Požiadavka na uloženie odoslaná!");
-      selectedSongIds = [];
-      isAdmin = false;
+      selectedSongIds = []; isAdmin = false;
       document.getElementById('admin-panel').style.display = 'none';
-      renderAllSongs();
-      loadPlaylistHeaders();
+      setTimeout(() => { loadPlaylistHeaders(); renderAllSongs(); }, 1500);
   }, 2000);
 }
 
 function loadPlaylistHeaders() {
-  fetch(`${SCRIPT_URL}?action=list&t=${Date.now()}`)
+  fetch(`${SCRIPT_URL.split('?')[0]}?action=list&t=${Date.now()}`)
     .then(r => r.json()).then(data => {
       const container = document.getElementById('playlists-section');
       if (!data.length) { container.innerHTML = ""; return; }
@@ -179,19 +177,18 @@ function loadPlaylistHeaders() {
 }
 
 function openPlaylist(name) {
-  fetch(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(name)}&t=${Date.now()}`)
+  fetch(`${SCRIPT_URL.split('?')[0]}?action=get&name=${encodeURIComponent(name)}&t=${Date.now()}`)
     .then(r => r.text()).then(idsText => {
       const ids = idsText.split(',');
       currentPlaylist = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
       currentMode = "playlist";
       document.getElementById('piesne-list').innerHTML = `<button onclick="renderAllSongs();" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; color:#00bfff; border-radius:10px; border:1px solid #333; font-weight:bold;">⬅ Späť na všetky piesne</button>` + 
       currentPlaylist.map(s => `<div onclick="openSongById('${s.id}', 'playlist')" style="background:#1e1e1e; padding:12px; margin-bottom:6px; border-radius:10px;"><span style="color:#00bfff; font-weight:bold;">${s.displayId}.</span> ${s.title}</div>`).join('');
-      window.scrollTo(0, 0);
     });
 }
 
 function deletePlaylist(name) {
-    if(confirm("Zmazať?")) fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`).then(() => loadPlaylistHeaders());
+    if(confirm("Zmazať?")) fetch(`${SCRIPT_URL.split('?')[0]}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(adminPassword)}`).then(() => loadPlaylistHeaders());
 }
 
 document.addEventListener('DOMContentLoaded', () => {
