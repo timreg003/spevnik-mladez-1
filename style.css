@@ -83,6 +83,12 @@ h2 {
   cursor: pointer;
 }
 
+.transpose-display {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #aaa;
+}
+
 .transpose-bar,
 .zoom-bar {
   display: flex;
