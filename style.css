@@ -17,13 +17,18 @@ button { background: #1e1e1e; border: none; color: #fff; padding: 10px 14px; cur
 button:active { background: #00bfff; color: black; }
 .back-btn { background: none; color: #aaa; font-size: 16px; border: none; cursor: pointer; margin-bottom: 10px; }
 
-#song-content { background: #1a1a1a; padding: 25px 15px; border-radius: 12px; line-height: 3.2; white-space: pre-wrap; margin-top: 10px; font-size: 17px; text-align: center; color: #fff; border: 1px solid #222; }
-.chord { color: #00bfff !important; font-weight: bold; position: relative; top: -1.3em; display: inline-block; height: 0; margin-right: 3px; font-size: 0.95em; }
+#song-content { background: #1a1a1a; padding: 25px 15px; border-radius: 12px; line-height: 2.8; white-space: pre-wrap; margin-top: 10px; font-size: 17px; text-align: center; color: #fff; border: 1px solid #222; }
+.chord { color: #00bfff !important; font-weight: bold; position: relative; top: -1.1em; display: inline-block; height: 0; margin-right: 3px; font-size: 0.95em; }
 
 .admin-item { display: flex; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 10px; margin-bottom: 5px; border-radius: 8px; border: 1px solid #444; }
 .admin-btn { padding: 10px; font-size: 1.3em; color: #00bfff; cursor: pointer; }
 
 .error-report { margin-top: 40px; padding: 15px; background: #161616; border-radius: 12px; border: 1px solid #222; text-align: left; }
-.error-report textarea { width: 100%; background: #222; border: 1px solid #333; color: white; border-radius: 8px; padding: 10px; box-sizing: border-box; resize: none; font-family: inherit; }
+.error-report input, .error-report textarea { width: 100%; background: #222; border: 1px solid #333; color: white; border-radius: 8px; padding: 10px; box-sizing: border-box; resize: none; font-family: inherit; }
 
 hr { border: 0; border-top: 1px solid #333; margin: 20px 0; }
+
+/* mobilné akordy – nižšie a modré */
+@media (max-width: 600px) {
+  .chord { top: -0.9em; color: #00bfff !important; }
+}
