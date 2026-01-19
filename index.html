@@ -26,6 +26,10 @@
 </head>
 
 <body>
+
+<!-- ✅ TOAST (Uložené / chyba) -->
+<div id="toast" class="toast" style="display:none;"></div>
+
 <div class="container">
 
   <button id="scroll-to-top" onclick="stopAutoscroll(); window.scrollTo({top: 0, behavior: 'smooth'})">
@@ -58,25 +62,18 @@
     <div id="dnes-section-wrapper" class="section-content" style="display:none;">
       <div id="dnes-section" class="list-box">Načítavam...</div>
 
-      <!-- EDITOR DNES – pod vloženými piesňami -->
       <div id="dnes-editor-panel" class="editor-panel" style="display:none;">
         <h3 class="editor-title">Editor – Piesne na dnes</h3>
 
-        <!-- 1) názov zoznamu / súboru (mení veľký nadpis) -->
         <input type="text" id="dnes-name" placeholder="Názov zoznamu (napr. Piatok 16.1.)" maxlength="40"/>
-
-        <!-- 2) filter -->
         <input type="text" id="dnes-search" placeholder="Vyhľadať pieseň..." autocomplete="off" oninput="filterDnesSearch()"/>
 
-        <!-- 3) všetky piesne -->
         <div class="editor-subtitle">Všetky piesne (klikni pre pridanie)</div>
         <div id="dnes-available-list" class="editor-list"></div>
 
-        <!-- 4) vytvorený zoznam -->
         <div class="editor-subtitle">Vytvorený zoznam (ťahaj pre poradie)</div>
         <div id="dnes-selected-editor" class="editor-list"></div>
 
-        <!-- buttons row (bez ZRUŠIŤ EDITOR) -->
         <div class="btn-row-2">
           <button class="btn-save" onclick="saveDnesEditor()">ULOŽIŤ</button>
           <button class="btn-delete" onclick="clearDnesSelection()">VYMAZAŤ</button>
@@ -90,32 +87,23 @@
       <i class="fas fa-chevron-down section-chevron" id="playlists-chevron"></i>
     </div>
 
-    <!-- ✅ OPRAVA: ID musí byť playlists-section-wrapper -->
     <div id="playlists-section-wrapper" class="section-content" style="display:none;">
       <div id="playlists-section" class="list-box">Načítavam...</div>
 
-      <!-- EDITOR PLAYLIST – pod existujúcimi playlistami -->
       <div id="admin-panel" class="editor-panel" style="display:none;">
         <h3 class="editor-title">Editor playlistu</h3>
 
-        <!-- 1) názov playlistu -->
         <input type="text" id="playlist-name" placeholder="Názov playlistu"/>
-
-        <!-- 2) filter -->
         <input type="text" id="playlist-search" placeholder="Vyhľadať pieseň..." autocomplete="off" oninput="filterPlaylistSearch()"/>
 
-        <!-- 3) všetky piesne -->
         <div class="editor-subtitle">Všetky piesne (klikni pre pridanie)</div>
         <div id="playlist-available-list" class="editor-list"></div>
 
-        <!-- 4) vytvorený playlist -->
         <div class="editor-subtitle">Vytvorený playlist (ťahaj pre poradie)</div>
         <div id="selected-list-editor" class="editor-list"></div>
 
-        <!-- buttons row -->
-        <div class="btn-row-3">
+        <div class="btn-row-2">
           <button class="btn-save" onclick="savePlaylist()">ULOŽIŤ</button>
-          <button class="btn-cancel" onclick="logoutAdmin()">ZRUŠIŤ EDITOR</button>
           <button class="btn-delete" onclick="clearSelection()">VYMAZAŤ</button>
         </div>
       </div>
@@ -191,17 +179,14 @@
 
     <div id="song-content"></div>
 
-    <!-- ✅ ERROR REPORT (Formspree) -->
+    <!-- ERROR REPORT (Formspree) -->
     <div id="error-report-container">
       <p class="error-title">Našiel/la si chybu? Napíš, opravím :)</p>
 
       <form id="error-form" onsubmit="submitErrorForm(event)">
         <input type="text" name="meno" placeholder="Tvoje meno" required>
         <textarea name="chyba" placeholder="Napr. chybný akord, preklep v texte..." required></textarea>
-
-        <!-- doplníme aj song info -->
         <input type="hidden" name="piesen" id="error-song-hidden" value="">
-
         <button type="submit" id="submit-btn">ODOSLAŤ</button>
       </form>
 
