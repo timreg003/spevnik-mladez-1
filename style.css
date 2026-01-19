@@ -20,26 +20,55 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: #121212; color: 
 .main-title { font-size: 1.8em; margin: 0; }
 #render-title { font-size: 1.6em; margin-bottom: 5px; }
 
-/* SEKČNÉ NADPISY */
-.playlist-header-title {
-    font-size: 1.4em;
-    margin-top: 25px;
-    margin-bottom: 15px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-/* ODDELENIE PLAYLISTOV */
-#playlists-wrapper {
-    border-top: 1px solid #333;
-    border-bottom: 1px solid #333; /* Spodná deliaca čiara */
-    margin-top: 20px;
-    padding-bottom: 20px;
-}
-
-#dnes-section-wrapper {
+/* SEKČNÉ NADPISY + CHEVRON */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    cursor: pointer;
     border-top: 1px solid #333;
     margin-top: 20px;
+}
+.section-header h2 {
+    margin: 0;
+}
+.section-chevron {
+    font-size: 1.2em;
+    color: #00bfff;
+    margin-left: 10px;
+}
+
+/* SKRÝVANIE OBSAHU */
+.section-content {
+    display: none;
+}
+
+/* EDITORY – rovnaký vzhľad */
+#dnes-editor-panel, #admin-panel {
+    background: #1e1e1e;
+    padding: 15px;
+    border-radius: 12px;
+    margin: 20px 0;
+    border: 1px solid #00bfff;
+}
+
+/* TLAČIDLÁ V JEDNOM RIADKU – FLEX */
+#dnes-editor-panel > div:last-child,
+#admin-panel > div:last-child {
+    display: flex;
+    gap: 10px;
+    flex-wrap: nowrap;
+}
+
+#dnes-editor-panel button,
+#admin-panel button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 #search { width: 100%; padding: 14px; font-size: 16px; border-radius: 12px; background: #1e1e1e; color: #fff; margin-bottom: 20px; border: 1px solid #333; outline: none; box-sizing: border-box; }
