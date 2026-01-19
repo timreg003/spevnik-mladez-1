@@ -10,13 +10,21 @@ let currentLevel = 1;
 
 function smartReset() {
     stopAutoscroll();
-    document.getElementById('admin-panel').style.display = 'none';
+    logoutAdmin(); // Pri domčeku vždy odhlásiť
     document.getElementById('song-detail').style.display = 'none';
     document.getElementById('song-list').style.display = 'block';
     document.getElementById('search').value = "";
     currentModeList = [...songs];
     filterSongs();
     window.scrollTo(0,0);
+}
+
+function logoutAdmin() {
+    isAdmin = false;
+    adminPassword = "";
+    document.getElementById('admin-panel').style.display = 'none';
+    renderAllSongs();
+    loadPlaylistHeaders();
 }
 
 async function parseXML() {
@@ -73,36 +81,26 @@ function renderAllSongs() {
         </div>`).join('');
 }
 
-async function submitErrorForm(e) {
-    e.preventDefault();
-    const btn = document.getElementById('submit-btn');
-    const status = document.getElementById('form-status');
-    btn.disabled = true; btn.innerText = "ODOSIELAM...";
-    try {
-        const response = await fetch("https://formspree.io/f/mvzzkwlw", {
-            method: "POST",
-            body: new FormData(e.target),
-            headers: { 'Accept': 'application/json' }
-        });
-        if (response.ok) {
-            status.innerText = "Vďaka! Správa bola odoslaná.";
-            status.style.display = "block";
-            e.target.reset();
-            setTimeout(() => { status.style.display = "none"; }, 4000);
-        }
-    } catch (err) { alert("Chyba spojenia."); }
-    finally { btn.disabled = false; btn.innerText = "ODOSLAŤ"; }
-}
-
 function openSongById(id, source) {
     const s = songs.find(x => x.id === id); if (!s) return;
     if (source === 'all') currentModeList = [...songs];
     currentSong = JSON.parse(JSON.stringify(s));
-    transposeStep = 0; currentLevel = 1; updateSpeedUI(); stopAutoscroll();
+    
+    // RESET TÓNINY NA 0 PRI KAŽDEJ NOVEJ PIESNI
+    transposeStep = 0; 
+    document.getElementById('transpose-val').innerText = "0";
+    
+    currentLevel = 1; updateSpeedUI(); stopAutoscroll();
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
     document.getElementById('render-title').innerText = s.displayId + '. ' + s.title;
     document.getElementById('form-subject').value = "Chyba v piesni: " + s.displayId + ". " + s.title;
+    
+    // Zobrazenie prvej akordovej značky ako pôvodnej tóniny
+    const firstChordMatch = s.origText.match(/\[(.*?)\]/);
+    const firstChord = firstChordMatch ? firstChordMatch[1] : "-";
+    document.getElementById('original-key-label').innerText = "Pôvodná tónina: " + firstChord;
+
     renderSong(); window.scrollTo(0,0);
 }
 
@@ -137,7 +135,6 @@ function startScrolling() {
         window.scrollBy(0, 1);
         const content = document.getElementById('song-content');
         const contentBottom = content.getBoundingClientRect().bottom;
-        // Zastaviť, keď spodok textu dosiahne spodok obrazovky
         if (contentBottom <= window.innerHeight) stopAutoscroll();
     }, delay);
 }
@@ -183,8 +180,21 @@ function resetTranspose() { transposeStep = 0; document.getElementById('transpos
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
 function changeFontSize(d) { fontSize += d; renderSong(); }
 
-// --- ADMIN & EDITOR (VRÁTENÉ ŠÍPKY A CERUZKA) ---
-function unlockAdmin() { let p = prompt('Heslo:'); if (p === "qwer") { isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderAllSongs(); loadPlaylistHeaders(); } }
+// --- PLAYLISTY & LOGIN LOGIKA ---
+function tryUnlockAdmin() {
+    if (isAdmin) return; // Ak už som prihlásený, nerob nič
+    let p = prompt('Zadaj heslo pre správu playlistov:');
+    if (p === "qwer") {
+        isAdmin = true;
+        adminPassword = p;
+        document.getElementById('admin-panel').style.display = 'block';
+        renderAllSongs();
+        loadPlaylistHeaders();
+    } else if (p !== null) {
+        alert('Nesprávne heslo');
+    }
+}
+
 function addToSelection(id) { if(!selectedSongIds.includes(id)) selectedSongIds.push(id); renderEditor(); }
 function clearSelection() { selectedSongIds = []; document.getElementById('playlist-name').value = ""; renderEditor(); }
 function removeFromSelection(idx) { selectedSongIds.splice(idx, 1); renderEditor(); }
@@ -194,6 +204,7 @@ function moveInSelection(idx, d) {
     [selectedSongIds[idx], selectedSongIds[newIdx]] = [selectedSongIds[newIdx], selectedSongIds[idx]];
     renderEditor();
 }
+
 function renderEditor() {
     const container = document.getElementById('selected-list-editor');
     if (selectedSongIds.length === 0) { container.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">Prázdny playlist</div>'; return; }
@@ -214,6 +225,8 @@ function savePlaylist() {
     const name = document.getElementById('playlist-name').value;
     if (!name || !selectedSongIds.length) return alert('Zadaj názov');
     window.open(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=qwer&content=${selectedSongIds.join(',')}`, '_blank','width=300,height=200');
+    // Po uložení hneď odhlásiť
+    setTimeout(logoutAdmin, 1000);
 }
 
 function editPlaylist(name) {
@@ -245,14 +258,41 @@ function processOpenPlaylist(name, t) {
 
 function renderPlaylists(d) {
     const sect = document.getElementById('playlists-section');
-    if (!d || d.length === 0) { sect.innerHTML = ""; return; }
-    sect.innerHTML = '<h2 class="playlist-header-title">Playlisty</h2>' + d.map(p => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom: 1px solid #333;" onclick="openPlaylist('${p.name}')">
-            <span style="cursor:pointer; flex-grow:1;"><i class="fas fa-music" style="color:#00bfff; margin-right:12px;"></i>${p.name}</span>
-            ${isAdmin ? `<div style="display:flex; gap:20px;"><i class="fas fa-edit" onclick="event.stopPropagation(); editPlaylist('${p.name}')" style="color:#00bfff;"></i><i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444;"></i></div>` : ''}
-        </div>`).join('');
+    // Nadpis Playlisty teraz slúži ako tlačidlo na prihlásenie
+    let html = `<h2 class="playlist-header-title" onclick="tryUnlockAdmin()" style="cursor:pointer; padding:10px 0;">Playlisty <small style="font-size:10px; opacity:0.5;">(klikni pre správu)</small></h2>`;
+    
+    if (d && d.length > 0) {
+        html += d.map(p => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom: 1px solid #333;" onclick="openPlaylist('${p.name}')">
+                <span style="cursor:pointer; flex-grow:1;"><i class="fas fa-music" style="color:#00bfff; margin-right:12px;"></i>${p.name}</span>
+                ${isAdmin ? `<div style="display:flex; gap:20px;"><i class="fas fa-edit" onclick="event.stopPropagation(); editPlaylist('${p.name}')" style="color:#00bfff;"></i><i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444;"></i></div>` : ''}
+            </div>`).join('');
+    }
+    // Pridaná čiara pod posledný playlist
+    sect.innerHTML = html + `<div style="border-bottom: 1px solid #333; margin-bottom: 10px;"></div>`;
 }
 
 function deletePlaylist(n) { if (confirm(`Vymazať ${n}?`)) window.open(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(n)}&pwd=qwer`, '_blank','width=300,height=200'); }
+
+async function submitErrorForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const status = document.getElementById('form-status');
+    btn.disabled = true; btn.innerText = "ODOSIELAM...";
+    try {
+        const response = await fetch("https://formspree.io/f/mvzzkwlw", {
+            method: "POST",
+            body: new FormData(e.target),
+            headers: { 'Accept': 'application/json' }
+        });
+        if (response.ok) {
+            status.innerText = "Vďaka! Správa bola odoslaná.";
+            status.style.display = "block";
+            e.target.reset();
+            setTimeout(() => { status.style.display = "none"; }, 4000);
+        }
+    } catch (err) { alert("Chyba spojenia."); }
+    finally { btn.disabled = false; btn.innerText = "ODOSLAŤ"; }
+}
 
 document.addEventListener('DOMContentLoaded', parseXML);
