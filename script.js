@@ -7,7 +7,7 @@ const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 
 // Autoscroll nastavenia
 let autoscrollInterval = null;
-const SCROLL_DELAY_MS = 90; // Pomalý a plynulý posun
+let scrollDelay = 80; // Základná rýchlosť (nižšie číslo = rýchlejšie)
 
 function smartReset() {
     stopAutoscroll();
@@ -50,7 +50,6 @@ function processXML(xmlText) {
     songs.sort((a, b) => {
         const isNumA = /^\d+$/.test(a.originalId), isNumB = /^\d+$/.test(b.originalId);
         if (isNumA && isNumB) return parseInt(a.originalId) - parseInt(b.originalId);
-        if (a.originalId.startsWith('M') && b.originalId.startsWith('M')) return a.originalId.localeCompare(b.originalId);
         return a.originalId.localeCompare(b.originalId);
     });
     filteredSongs = [...songs];
@@ -67,11 +66,43 @@ function renderAllSongs() {
         </div>`).join('');
 }
 
-function updateFormSubject(title) {
-    const sub = document.getElementById('form-subject');
+// FORMULÁR LOGIKA - BEZ PREKLIKU
+async function submitErrorForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const status = document.getElementById('form-status');
     const form = document.getElementById('error-form');
-    if (sub) sub.value = "Chyba v piesni: " + title;
-    if (form) form.reset();
+    
+    btn.disabled = true;
+    btn.innerText = "ODOSIELAM...";
+
+    const formData = new FormData(form);
+    
+    try {
+        const response = await fetch("https://formspree.io/f/mvzzkwlw", {
+            method: "POST",
+            body: formData,
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (response.ok) {
+            status.innerText = "Vďaka! Správa bola odoslaná.";
+            status.style.display = "block";
+            form.reset();
+            setTimeout(() => { status.style.display = "none"; }, 4000);
+        } else {
+            alert("Chyba pri odosielaní. Skús to neskôr.");
+        }
+    } catch (err) {
+        alert("Chyba spojenia.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "ODOSLAŤ";
+    }
+}
+
+function updateFormSubject(title) {
+    document.getElementById('form-subject').value = "Chyba v piesni: " + title;
 }
 
 function openSongById(id, source) {
@@ -111,15 +142,7 @@ function navigateSong(d) {
     }
 }
 
-function transposeChord(c, s) {
-    return c.replace(/[A-H][#b]?/g, (n) => {
-        let note = n === 'B' ? 'B' : (n === 'H' ? 'H' : n);
-        let idx = scale.indexOf(note); if (idx === -1) return n;
-        let newIdx = (idx + s) % 12; while (newIdx < 0) newIdx += 12;
-        return scale[newIdx];
-    });
-}
-
+// LOGIKA AUTOSCROLL S RÝCHLOSŤAMI
 function toggleAutoscroll() {
     const btn = document.getElementById('scroll-btn');
     if (autoscrollInterval) {
@@ -127,17 +150,45 @@ function toggleAutoscroll() {
     } else {
         btn.innerHTML = '<i class="fas fa-pause"></i>';
         btn.classList.add('active');
-        autoscrollInterval = setInterval(() => {
-            window.scrollBy(0, 1);
-            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) stopAutoscroll();
-        }, SCROLL_DELAY_MS);
+        startScrolling();
     }
+}
+
+function startScrolling() {
+    if (autoscrollInterval) clearInterval(autoscrollInterval);
+    autoscrollInterval = setInterval(() => {
+        window.scrollBy(0, 1);
+        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) stopAutoscroll();
+    }, scrollDelay);
 }
 
 function stopAutoscroll() {
     if (autoscrollInterval) { clearInterval(autoscrollInterval); autoscrollInterval = null; }
     const btn = document.getElementById('scroll-btn');
     if (btn) { btn.innerHTML = '<i class="fas fa-play"></i>'; btn.classList.remove('active'); }
+}
+
+function changeScrollSpeed(delta) {
+    // delta -10 (zajac = menší delay = rýchlejšie)
+    // delta +10 (korytnačka = väčší delay = pomalšie)
+    scrollDelay += delta;
+    if (scrollDelay < 10) scrollDelay = 10;
+    if (scrollDelay > 300) scrollDelay = 300;
+    
+    // Zobrazenie úrovne (čím menší delay, tým vyššie číslo úrovne)
+    const level = Math.round((310 - scrollDelay) / 10);
+    document.getElementById('speed-label').innerText = "Rýchlosť: " + level;
+    
+    if (autoscrollInterval) startScrolling(); // Aktualizuj bežiaci posun
+}
+
+function transposeChord(c, s) {
+    return c.replace(/[A-H][#b]?/g, (n) => {
+        let note = n === 'B' ? 'B' : (n === 'H' ? 'H' : n);
+        let idx = scale.indexOf(note); if (idx === -1) return n;
+        let newIdx = (idx + s) % 12; while (newIdx < 0) newIdx += 12;
+        return scale[newIdx];
+    });
 }
 
 function closeSong() { stopAutoscroll(); document.getElementById('song-list').style.display = 'block'; document.getElementById('song-detail').style.display = 'none'; }
