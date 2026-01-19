@@ -25,6 +25,9 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: #121212; color: 
     margin-bottom: 15px;
     text-transform: uppercase;
     letter-spacing: 1px;
+    text-align: center !important;
+    width: 100% !important;
+    display: block !important;
 }
 
 #search { width: 100%; padding: 14px; font-size: 16px; border-radius: 12px; background: #1e1e1e; color: #fff; margin-bottom: 20px; border: 1px solid #333; outline: none; box-sizing: border-box; }
@@ -34,7 +37,6 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: #121212; color: 
 .btn-row { display: flex; background: #1e1e1e; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
 button { background: #1e1e1e; border: none; color: #fff; padding: 10px 14px; cursor: pointer; transition: 0.2s; }
 button:active { background: #333; }
-
 
 #scroll-btn.active { background: #00bfff !important; color: black !important; }
 
@@ -48,6 +50,3 @@ button:active { background: #333; }
 textarea { resize: none; outline: none; }
 
 .dnes-empty { color: #666; text-align: center; padding: 15px; font-size: 14px; }
-
-/* centrovanie nadpisu Piesne na dnes */
-<h2 class="playlist-header-title" style="cursor:pointer;text-align:center;width:100%;display:block;" onclick="openDnesEditor()">Piesne na dnes <small style="font-size:10px;opacity:0.5;">(klikni pre úpravu)</small></h2>
