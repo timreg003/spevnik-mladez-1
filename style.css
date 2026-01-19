@@ -1,4 +1,4 @@
-/* Zabráň označovaniu textu pri drag (inputs/textarea môžu) */
+/* Drag: nič neoznačuje text (inputs môžu) */
 *{
   -webkit-user-select: none;
   user-select: none;
@@ -43,17 +43,15 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 .main-title { font-size:1.8em; margin:0; }
 #render-title { font-size:1.6em; margin-bottom:5px; }
 
-/* HLAVIČKA – pevné 3 zóny, aby nebola natlačená */
+/* Header (stable) */
 .topbar{
   display:grid;
   grid-template-columns: 110px 1fr 60px;
   align-items:center;
-  position:relative;
   margin-bottom:20px;
   padding-top:10px;
   z-index:10000;
 }
-
 #admin-toggle-btn{
   justify-self:start;
   display:flex; align-items:center; gap:10px;
@@ -64,7 +62,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 }
 #admin-toggle-btn i{ font-size:24px; }
 #admin-toggle-text{ font-size:14px; }
-
 .home-ico{
   justify-self:end;
   font-size:1.5em;
@@ -74,7 +71,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   -webkit-tap-highlight-color:transparent;
 }
 
-/* SECTION HEADERS */
+/* Section headers */
 .section-header{
   display:flex; justify-content:space-between; align-items:center;
   padding:10px 0; cursor:pointer;
@@ -92,7 +89,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   border:1px solid #333; outline:none; box-sizing:border-box;
 }
 
-/* LIST BOXES – rovnaké pozadie pre dnes/playlisty/zoznam */
+/* Same container style everywhere */
 .list-box{
   background:#1a1a1a;
   border:1px solid #333;
@@ -100,29 +97,50 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   overflow:hidden;
 }
 
-/* Jednotný riadok piesne – opravuje “odskoky” všade */
+/* ✅ SONG ROW: smaller ID column + minimal padding (closer to edge) */
 .song-row{
   display:grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 78px 1fr;   /* was 110px -> now much closer */
   gap:10px;
-  padding:12px;
+  padding:12px 12px;               /* keep same left padding for all lists */
   border-bottom:1px solid #333;
   color:#fff;
   background:#121212;
 }
 .song-row:last-child{ border-bottom:none; }
+
 .song-id{
   color:#00bfff;
   font-weight:900;
-  text-align:right;
+  text-align:right;                 /* keeps alignment but not too far */
   white-space:nowrap;
 }
+
 .song-title{
   word-break: break-word;
   overflow-wrap:anywhere;
 }
 
-/* EDITOR */
+/* Playlists rows should visually match song rows */
+.pl-row{
+  display:grid;
+  grid-template-columns: 78px 1fr;
+  gap:10px;
+  padding:12px 12px;
+  border-bottom:1px solid #333;
+  color:#fff;
+  background:#121212;
+  align-items:center;
+}
+.pl-row:last-child{ border-bottom:none; }
+.pl-icon{
+  color:#00bfff;
+  font-size:18px;
+  text-align:right;
+  white-space:nowrap;
+}
+
+/* Editor panels */
 .editor-panel{
   display:none;
   background:#1e1e1e;
@@ -131,7 +149,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   margin:20px 0;
   border:1px solid #00bfff;
 }
-
 .editor-title{ color:#00bfff; margin-top:0; font-size:16px; }
 .editor-subtitle{ font-size:12px; opacity:0.85; margin:8px 0 6px; }
 
@@ -156,13 +173,13 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   margin-bottom:10px;
 }
 
-/* Draggable row (editor + playlist order) */
+/* draggable rows in editors */
 .draggable-item{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
-  padding:10px;
+  padding:10px 10px;
   border-bottom:1px solid #333;
   color:#fff;
   background:#121212;
@@ -198,7 +215,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   cursor:pointer;
 }
 
-/* bottom buttons row */
 .btn-row-2{
   display:flex;
   gap:10px;
@@ -214,7 +230,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 .btn-save{ background:#00c853; color:#001b00; }
 .btn-delete{ background:#ff4444; color:#fff; }
 
-/* SONG DETAIL CONTROLS */
 .controls{
   display:flex; justify-content:space-around;
   background:#1a1a1a; padding:10px;
@@ -270,7 +285,6 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 
 .dnes-empty{ color:#666; text-align:center; padding:15px; font-size:14px; }
 
-/* Update section */
 .update-box{ text-align:center; margin:20px 0; }
 .btn-update{
   background:#00bfff; color:black; font-weight:900;
