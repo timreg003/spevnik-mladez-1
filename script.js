@@ -1,7 +1,7 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDFJ_XoBEbg6KYe1oM8Wj9IAzkq4yqzMSkfApgcc3aFeD0-Pxgww/exec';
 
 let songs = [], filteredSongs = [], currentSong = null;
-let currentModeList = []; 
+let currentModeList = [];
 let transposeStep = 0, fontSize = 17, chordsVisible = true, isAdmin = false, selectedSongIds = [], adminPassword = "";
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 let autoscrollInterval = null;
@@ -18,8 +18,9 @@ function smartReset() {
     document.getElementById('song-detail').style.display = 'none';
     document.getElementById('song-list').style.display = 'block';
     document.getElementById('search').value = "";
-    currentModeList = [...songs]; filterSongs(); 
-    loadPlaylistHeaders(); // DOPLNENÝ RIADOK: Aktualizuje playlisty pri návrate domov
+    currentModeList = [...songs]; filterSongs();
+    loadPlaylistHeaders();                // načíta normálne playlisty
+    renderDnesSection();                  // <— NOVÉ: vykreslí „dnes“ okamžite
     window.scrollTo(0,0);
 }
 
@@ -68,7 +69,7 @@ function processXML(xmlText) {
     });
 
     filteredSongs = [...songs]; currentModeList = [...songs];
-    renderAllSongs(); loadPlaylistHeaders();
+    renderAllSongs(); loadPlaylistHeaders(); renderDnesSection();
 }
 
 function renderAllSongs() {
@@ -105,7 +106,7 @@ function renderSong() {
 
 function navigateSong(d) {
     const idx = currentModeList.findIndex(s => s.id === currentSong.id);
-    const n = currentModeList[idx + d]; 
+    const n = currentModeList[idx + d];
     if (n) { transposeStep = 0; openSongById(n.id, 'playlist'); }
 }
 
@@ -139,9 +140,9 @@ function changeScrollSpeed(delta) {
     updateSpeedUI(); if (autoscrollInterval) startScrolling();
 }
 
-function updateSpeedUI() { 
+function updateSpeedUI() {
     const lb = document.getElementById('speed-label');
-    if(lb) lb.innerText = "Rýchlosť: " + currentLevel; 
+    if(lb) lb.innerText = "Rýchlosť: " + currentLevel;
 }
 
 function transposeChord(c, s) {
@@ -167,7 +168,15 @@ function changeFontSize(d) { fontSize += d; renderSong(); }
 
 function tryUnlockAdmin() {
     let p = prompt('Zadaj heslo:');
-    if (p === "qwer") { isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderAllSongs(); loadPlaylistHeaders(); }
+    if (p === "qwer") {
+        isAdmin = true;
+        document.getElementById('admin-panel').style.display = 'block';
+        // otvoríme čistý editor (žiadne predvyplnené meno)
+        selectedSongIds = [];
+        document.getElementById('playlist-name').value = "";
+        renderEditor();
+        renderAllSongs(); loadPlaylistHeaders();
+    }
 }
 
 function addToSelection(id) { if(!selectedSongIds.includes(id)) selectedSongIds.push(id); renderEditor(); }
@@ -228,8 +237,8 @@ async function cacheAllPlaylists(playlistData) {
 }
 
 function loadPlaylistHeaders() {
-    fetch(`${SCRIPT_URL}?action=list`).then(r => r.json()).then(d => { 
-        localStorage.setItem('offline_playlists', JSON.stringify(d)); 
+    fetch(`${SCRIPT_URL}?action=list`).then(r => r.json()).then(d => {
+        localStorage.setItem('offline_playlists', JSON.stringify(d));
         renderPlaylists(d); cacheAllPlaylists(d);
     })
     .catch(() => { const saved = localStorage.getItem('offline_playlists'); if (saved) renderPlaylists(JSON.parse(saved)); });
@@ -254,19 +263,81 @@ function processOpenPlaylist(name, t) {
     window.scrollTo(0,0);
 }
 
+/* ============================================================
+   === PLAYLISTY NA DNES – NOVÉ FUNKCIE
+   ============================================================ */
+function getDnesIds() {
+    return (localStorage.getItem('playlist_dnes') || '').split(',').filter(x => x);
+}
+function setDnesIds(arr) {
+    localStorage.setItem('playlist_dnes', arr.join(','));
+    renderDnesSection();
+}
+
+function renderDnesSection() {
+    const box = document.getElementById('dnes-section');
+    const ids = getDnesIds();
+    if (!ids.length) {
+        box.innerHTML = '<div class="dnes-empty">Žiadne vytvorené playlisty.</div>';
+        return;
+    }
+    const items = ids.map((id, idx) => {
+        const s = songs.find(x => x.id === id);
+        if (!s) return '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid #333;color:#fff;">
+            <span><span style="color:#00bfff;font-weight:bold;">${s.displayId}.</span> ${s.title}</span>
+            <div style="display:flex;gap:4px;">
+                <button onclick="moveDnes(${idx},-1)" style="padding:4px 6px;background:#333;"><i class="fas fa-chevron-up"></i></button>
+                <button onclick="moveDnes(${idx},1)" style="padding:4px 6px;background:#333;"><i class="fas fa-chevron-down"></i></button>
+                <button onclick="removeDnes(${idx})" style="padding:4px 8px;background:#ff4444;"><i class="fas fa-times"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+    box.innerHTML = items + `<div style="border-bottom:1px solid #333;margin-bottom:10px;"></div>`;
+}
+
+function moveDnes(idx, d) {
+    const arr = getDnesIds();
+    const n = idx + d; if (n < 0 || n >= arr.length) return;
+    [arr[idx], arr[n]] = [arr[n], arr[idx]];
+    setDnesIds(arr);
+}
+function removeDnes(idx) {
+    const arr = getDnesIds(); arr.splice(idx, 1); setDnesIds(arr);
+}
+
+function toggleStar(playlistName) {
+    const arr = getDnesIds();
+    const cached = localStorage.getItem('playlist_' + playlistName);
+    if (!cached) return;
+    const ids = cached.split(',').filter(x => x);
+    // ak už niečo z toho v „dnes“ je, považujeme to za „odstrániť“, inak pridať
+    const overlap = ids.filter(id => arr.includes(id));
+    let newArr;
+    if (overlap.length) {
+        newArr = arr.filter(id => !ids.includes(id));
+    } else {
+        newArr = [...arr, ...ids];
+    }
+    setDnesIds(newArr);
+}
+
 function renderPlaylists(d) {
     const sect = document.getElementById('playlists-section');
     let html = `<h2 class="playlist-header-title" onclick="tryUnlockAdmin()" style="cursor:pointer;padding:10px 0;text-align:center;width:100%;display:block;">Playlisty <small style="font-size:10px;opacity:0.5;display:block;">(klikni pre správu)</small></h2>`;
     if (d && d.length > 0) {
-        html += d.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:15px;border-bottom:1px solid #333;" onclick="openPlaylist('${p.name}')">
-            <span style="cursor:pointer;flex-grow:1;display:flex;align-items:center;color:#fff;"><i class="fas fa-music" style="color:#00bfff;width:25px;margin-right:12px;"></i>${p.name}</span>
-            ${isAdmin ? `<div style="display:flex;gap:20px;"><i class="fas fa-edit" onclick="event.stopPropagation(); editPlaylist('${p.name}')" style="color:#00bfff;padding:10px;"></i><i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444;padding:10px;"></i></div>` : ''}
+        html += d.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:15px;border-bottom:1px solid #333;">
+            <span style="cursor:pointer;flex-grow:1;display:flex;align-items:center;color:#fff;" onclick="openPlaylist('${p.name}')"><i class="fas fa-music" style="color:#00bfff;width:25px;margin-right:12px;"></i>${p.name}</span>
+            <div style="display:flex;gap:20px;">
+                <button class="star-btn ${getDnesIds().filter(id => (localStorage.getItem('playlist_' + p.name) || '').split(',').includes(id)).length ? 'active' : ''}" onclick="event.stopPropagation(); toggleStar('${p.name}')" title="Pridať / odobrať z 'Playlisty na dnes'"><i class="fas fa-star"></i></button>
+                ${isAdmin ? `<i class="fas fa-edit" onclick="event.stopPropagation(); editPlaylist('${p.name}')" style="color:#00bfff;padding:10px;"></i><i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444;padding:10px;"></i>` : ''}
+            </div>
         </div>`).join('');
     }
     sect.innerHTML = html + `<div style="border-bottom:1px solid #333;margin-bottom:10px;"></div>`;
 }
 
-async function deletePlaylist(n) { 
+async function deletePlaylist(n) {
     if (confirm(`Vymazať ${n}?`)) {
         try {
             await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(n)}&pwd=qwer`, { mode: 'no-cors' });
