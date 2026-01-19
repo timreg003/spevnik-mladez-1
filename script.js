@@ -5,19 +5,25 @@ let currentModeList = [];
 let transposeStep = 0, fontSize = 17, chordsVisible = true, isAdmin = false, selectedSongIds = [], adminPassword = "";
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 
-// OPRAVENÝ DOMČEK PRE MOBIL
+// AGRESÍVNY RESET PRE MOBILY
 function smartReset() {
-    document.getElementById('song-detail').style.display = 'none';
+    // 1. Skryť všetky prekrývajúce vrstvy
     document.getElementById('admin-panel').style.display = 'none';
+    document.getElementById('song-detail').style.display = 'none';
+    
+    // 2. Zobraziť základný zoznam
     document.getElementById('song-list').style.display = 'block';
     
-    // Resetuj filtre a režim
-    document.getElementById('search').value = "";
+    // 3. Vyčistiť stavy
     isAdmin = false;
+    document.getElementById('search').value = "";
     currentModeList = [...songs];
+    
+    // 4. Refresh zobrazenia
     filterSongs();
     
-    window.scrollTo({top: 0, behavior: 'smooth'});
+    // 5. Scroll na úplný vrch
+    window.scrollTo(0,0);
 }
 
 async function parseXML() {
@@ -56,19 +62,16 @@ function processXML(xmlText) {
         };
     });
 
-    // RADENIE: Čísla -> Mariánske -> Ostatné
+    // Radenie
     songs.sort((a, b) => {
         const isNumA = /^\d+$/.test(a.originalId), isNumB = /^\d+$/.test(b.originalId);
         const isMarA = a.originalId.startsWith('M'), isMarB = b.originalId.startsWith('M');
-
         if (isNumA && isNumB) return parseInt(a.originalId) - parseInt(b.originalId);
         if (isNumA && !isNumB) return -1;
         if (!isNumA && isNumB) return 1;
-
         if (isMarA && isMarB) return a.originalId.localeCompare(b.originalId);
         if (isMarA && !isMarB) return -1;
         if (!isMarA && isMarB) return 1;
-
         return a.originalId.localeCompare(b.originalId);
     });
 
@@ -88,20 +91,17 @@ function renderAllSongs() {
 
 function openPlaylist(name) {
     const cached = localStorage.getItem('playlist_' + name);
-    if (cached) {
-        processOpenPlaylist(name, cached);
-    } else {
+    if (cached) { processOpenPlaylist(name, cached); } 
+    else {
         document.getElementById('piesne-list').innerHTML = '<div style="text-align:center; padding:20px; color:#00bfff;">Načítavam...</div>';
         fetch(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(name)}`)
-        .then(r => r.text())
-        .then(t => { localStorage.setItem('playlist_' + name, t); processOpenPlaylist(name, t); });
+        .then(r => r.text()).then(t => { localStorage.setItem('playlist_' + name, t); processOpenPlaylist(name, t); });
     }
 }
 
 function processOpenPlaylist(name, t) {
     const ids = t.split(',');
     currentModeList = ids.map(id => songs.find(s => s.id === id)).filter(x => x);
-    
     document.getElementById('piesne-list').innerHTML = `
     <div style="text-align:center; padding:15px; border-bottom:2px solid #00bfff; margin-bottom:15px;">
         <h2 class="playlist-header-title" style="font-size:1.3em; margin:0;">${name}</h2>
@@ -113,21 +113,13 @@ function processOpenPlaylist(name, t) {
 
 function openSongById(id, source) {
     const s = songs.find(x => x.id === id); if (!s) return;
-    
-    // Ak otvárame zo zoznamu "Všetky", nastavíme navigáciu na všetky
-    if (source === 'all') {
-        currentModeList = [...songs];
-    }
-    
+    if (source === 'all') { currentModeList = [...songs]; }
     currentSong = JSON.parse(JSON.stringify(s));
     transposeStep = 0;
-    document.getElementById('transpose-val').innerText = "0";
-    document.getElementById('form-subject').value = `Chyba v piesni: ${s.displayId}. ${s.title}`;
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
     document.getElementById('render-title').innerText = s.displayId + '. ' + s.title;
-    renderSong(); 
-    window.scrollTo(0,0);
+    renderSong(); window.scrollTo(0,0);
 }
 
 function renderSong() {
@@ -145,10 +137,8 @@ function navigateSong(d) {
     if (n) {
         currentSong = JSON.parse(JSON.stringify(n));
         transposeStep = 0;
-        document.getElementById('transpose-val').innerText = "0";
         document.getElementById('render-title').innerText = n.displayId + '. ' + n.title;
-        renderSong();
-        window.scrollTo(0,0);
+        renderSong(); window.scrollTo(0,0);
     }
 }
 
@@ -173,24 +163,33 @@ function resetTranspose() { transposeStep = 0; document.getElementById('transpos
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
 function changeFontSize(d) { fontSize += d; renderSong(); }
 
-function unlockAdmin() { 
-    let p = prompt('Heslo:'); 
-    if (p === "qwer") { 
-        adminPassword = p; 
-        isAdmin = true; 
-        document.getElementById('admin-panel').style.display = 'block'; 
-        renderAllSongs(); 
-        document.getElementById('admin-panel').scrollIntoView({behavior: 'smooth'});
-    } 
+function unlockAdmin() { let p = prompt('Heslo:'); if (p === "qwer") { adminPassword = p; isAdmin = true; document.getElementById('admin-panel').style.display = 'block'; renderAllSongs(); loadPlaylistHeaders(); } }
+function addToSelection(id) { if(!selectedSongIds.includes(id)) selectedSongIds.push(id); renderEditor(); }
+function clearSelection() { selectedSongIds = []; document.getElementById('playlist-name').value = ""; renderEditor(); }
+function removeFromSelection(idx) { selectedSongIds.splice(idx, 1); renderEditor(); }
+function renderEditor() {
+    const container = document.getElementById('selected-list-editor');
+    if (selectedSongIds.length === 0) { container.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">Prázdny playlist</div>'; return; }
+    container.innerHTML = selectedSongIds.map((id, index) => {
+        const s = songs.find(x => x.id === id);
+        return `<div style="display:flex; align-items:center; background:#1e1e1e; margin-bottom:2px; padding:5px; border-radius:4px; gap:5px; border-bottom:1px solid #333;"><span style="flex-grow:1; font-size:13px; color:white;">${s ? s.title : id}</span><button onclick="removeFromSelection(${index})" style="padding:4px; background:#ff4444; border:none; color:white;"><i class="fas fa-times"></i></button></div>`;
+    }).join('');
 }
-
+function savePlaylist() {
+    const name = document.getElementById('playlist-name').value;
+    if (!name || !selectedSongIds.length) return alert('Zadaj názov');
+    window.open(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${adminPassword}&content=${selectedSongIds.join(',')}`, '_blank','width=300,height=200');
+}
+function deletePlaylist(name) {
+    if (!confirm(`Vymazať ${name}?`)) return;
+    window.open(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${adminPassword}`, '_blank','width=300,height=200');
+}
 function loadPlaylistHeaders() {
     fetch(`${SCRIPT_URL}?action=list`)
     .then(r => r.json())
     .then(d => { localStorage.setItem('offline_playlists', JSON.stringify(d)); renderPlaylists(d); })
     .catch(() => { const saved = localStorage.getItem('offline_playlists'); if (saved) renderPlaylists(JSON.parse(saved)); });
 }
-
 function renderPlaylists(d) {
     const sect = document.getElementById('playlists-section');
     if (!d || d.length === 0) { sect.innerHTML = ""; return; }
@@ -203,37 +202,5 @@ function renderPlaylists(d) {
             ${isAdmin ? `<div style="display:flex; gap:20px;"><i class="fas fa-trash" onclick="event.stopPropagation(); deletePlaylist('${p.name}')" style="color:#ff4444;"></i></div>` : ''}
         </div>`).join('');
 }
-
-function addToSelection(id) { if(!selectedSongIds.includes(id)) selectedSongIds.push(id); renderEditor(); }
-function clearSelection() { selectedSongIds = []; document.getElementById('playlist-name').value = ""; renderEditor(); }
-function removeFromSelection(idx) { selectedSongIds.splice(idx, 1); renderEditor(); }
-function renderEditor() {
-    const container = document.getElementById('selected-list-editor');
-    if (selectedSongIds.length === 0) { container.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">Prázdny playlist</div>'; return; }
-    container.innerHTML = selectedSongIds.map((id, index) => {
-        const s = songs.find(x => x.id === id);
-        return `<div style="display:flex; align-items:center; background:#1e1e1e; margin-bottom:2px; padding:5px; border-radius:4px; gap:5px; border-bottom:1px solid #333;"><span style="flex-grow:1; font-size:13px; color:white;">${s ? s.title : id}</span><button onclick="removeFromSelection(${index})" style="padding:4px; background:#ff4444; border:none; color:white; border-radius:4px;"><i class="fas fa-times"></i></button></div>`;
-    }).join('');
-}
-
-function savePlaylist() {
-    const name = document.getElementById('playlist-name').value;
-    if (!name || !selectedSongIds.length) return alert('Zadaj názov a vyber piesne');
-    window.open(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${adminPassword}&content=${selectedSongIds.join(',')}`, '_blank','width=300,height=200');
-}
-
-function deletePlaylist(name) {
-    if (!confirm(`Vymazať playlist ${name}?`)) return;
-    window.open(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${adminPassword}`, '_blank','width=300,height=200');
-}
-
-document.getElementById('error-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('form-submit-btn');
-    btn.innerText = "ODOSIELAM..."; btn.disabled = true;
-    fetch("https://formsubmit.co/ajax/3860436856002f5674749f57d69280f8", { method: "POST", body: new FormData(this) })
-    .then(res => res.json()).then(() => { alert("Chyba bola nahlásená. Ďakujeme!"); this.reset(); btn.innerText = "ODOSLAŤ CHYBU"; btn.disabled = false; })
-    .catch(() => { alert("Chyba pri odosielaní."); btn.innerText = "ODOSLAŤ CHYBU"; btn.disabled = false; });
-});
 
 document.addEventListener('DOMContentLoaded', parseXML);
