@@ -24,6 +24,10 @@
 </head>
 <body>
   <div class="container">
+    <button id="scroll-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; width:50px; height:50px; border-radius:50%; background:#00bfff; color:black; border:none; z-index:10001; box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-size: 20px;">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
     <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px; padding-top: 10px; z-index: 10000;">
       <i class="fas fa-lock" style="position: absolute; left: 0; opacity: 0.15; cursor: pointer; padding: 15px;" onclick="unlockAdmin()"></i>
       <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
