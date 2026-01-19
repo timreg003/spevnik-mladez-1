@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spevnik-v2'; // Zmenili sme verziu na v2, aby si iPhone vynútil aktualizáciu
+const CACHE_NAME = 'spevnik-v3'; // ZMENENÉ na v3 pre vynútenie aktualizácie
 const ASSETS = [
   './',
   './index.html',
@@ -6,7 +6,6 @@ const ASSETS = [
   './script.js',
   './icon.png',
   './manifest.json',
-  // Tieto riadky prinútia iPhone uložiť ikony a písma do offline pamäte
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap'
