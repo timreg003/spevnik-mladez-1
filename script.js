@@ -7,32 +7,25 @@ const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 let autoscrollInterval = null;
 let currentLevel = 1;
 
-// Vylepšené tlačidlo "Hore"
+// Tlačidlo "Hore"
 window.addEventListener('scroll', () => {
     const btn = document.getElementById("scroll-to-top");
-    if (window.scrollY > 300) {
-        btn.style.display = "flex";
-    } else {
-        btn.style.display = "none";
-    }
+    if (window.scrollY > 300) btn.style.display = "flex";
+    else btn.style.display = "none";
 }, { passive: true });
 
 function smartReset() {
-    stopAutoscroll();
-    logoutAdmin();
+    stopAutoscroll(); logoutAdmin();
     document.getElementById('song-detail').style.display = 'none';
     document.getElementById('song-list').style.display = 'block';
     document.getElementById('search').value = "";
-    currentModeList = [...songs];
-    filterSongs();
-    window.scrollTo(0,0);
+    currentModeList = [...songs]; filterSongs(); window.scrollTo(0,0);
 }
 
 function logoutAdmin() {
     isAdmin = false; adminPassword = "";
     document.getElementById('admin-panel').style.display = 'none';
-    selectedSongIds = [];
-    renderAllSongs(); loadPlaylistHeaders();
+    selectedSongIds = []; renderAllSongs(); loadPlaylistHeaders();
 }
 
 async function parseXML() {
@@ -73,10 +66,8 @@ function processXML(xmlText) {
         return a.title.localeCompare(b.title, 'sk');
     });
 
-    filteredSongs = [...songs];
-    currentModeList = [...songs];
-    renderAllSongs();
-    loadPlaylistHeaders();
+    filteredSongs = [...songs]; currentModeList = [...songs];
+    renderAllSongs(); loadPlaylistHeaders();
 }
 
 function renderAllSongs() {
@@ -91,8 +82,7 @@ function openSongById(id, source) {
     const s = songs.find(x => x.id === id); if (!s) return;
     if (source === 'all') currentModeList = [...songs];
     currentSong = JSON.parse(JSON.stringify(s));
-    transposeStep = 0; 
-    document.getElementById('transpose-val').innerText = "0";
+    transposeStep = 0; document.getElementById('transpose-val').innerText = "0";
     currentLevel = 1; updateSpeedUI(); stopAutoscroll();
     document.getElementById('song-list').style.display = 'none';
     document.getElementById('song-detail').style.display = 'block';
@@ -204,7 +194,6 @@ function renderEditor() {
     }).join('');
 }
 
-// VRÁTENÁ FUNKCIA NA ÚPRAVU
 function editPlaylist(name) {
     const cached = localStorage.getItem('playlist_' + name);
     if (!cached) return;
@@ -214,14 +203,19 @@ function editPlaylist(name) {
     renderEditor(); window.scrollTo(0,0);
 }
 
+// UPRAVENÉ: Okamžité zmiznutie editora
 async function savePlaylist() {
     const name = document.getElementById('playlist-name').value;
     if (!name || !selectedSongIds.length) return alert('Zadaj názov');
-    const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=qwer&content=${selectedSongIds.join(',')}`;
+    const idsToSave = selectedSongIds.join(',');
+    
+    logoutAdmin(); // Zmizne hneď
+
+    const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=qwer&content=${idsToSave}`;
     try {
         await fetch(url, { mode: 'no-cors' });
-        alert('Uložené.');
-        setTimeout(() => { loadPlaylistHeaders(); logoutAdmin(); }, 500);
+        alert('Playlist uložený.');
+        setTimeout(() => { loadPlaylistHeaders(); }, 500);
     } catch (e) { alert('Chyba.'); }
 }
 
@@ -295,6 +289,33 @@ async function submitErrorForm(e) {
         setTimeout(() => { document.getElementById('form-status').style.display = "none"; }, 4000);
     } catch (err) { alert("Chyba."); }
     finally { btn.disabled = false; btn.innerText = "ODOSLAŤ"; }
+}
+
+// NOVINKA: TVRDÝ RESET A VYMAZANIE PAMÄTE
+async function hardResetApp() {
+    if (confirm("Naozaj chceš vymazať pamäť aplikácie a vynútiť aktualizáciu?")) {
+        // Vymazať LocalStorage
+        localStorage.clear();
+        
+        // Vymazať Cache Storage (Service Worker)
+        if ('caches' in window) {
+            const keys = await caches.keys();
+            for (const key of keys) {
+                await caches.delete(key);
+            }
+        }
+        
+        // Odregistrovať Service Workery
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const reg of registrations) {
+                await reg.unregister();
+            }
+        }
+        
+        // Úplný reštart
+        window.location.reload(true);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', parseXML);
