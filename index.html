@@ -32,6 +32,7 @@
 
     <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px; padding-top: 10px; z-index: 10000;">
       <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
+      <span id="login-text" style="position: absolute; left: 0; font-size: 12px; color: #888; cursor: pointer; padding: 15px;" onclick="toggleLogin()">Prihlásiť</span>
       <i class="fas fa-home" style="position: absolute; right: 0; font-size: 1.5em; color: #00bfff; cursor: pointer; padding: 15px;" onclick="smartReset()"></i>
     </div>
 
@@ -40,7 +41,7 @@
 
       <!-- === PIESNE NA DNES === -->
       <div class="section-header" onclick="toggleSection('dnes')">
-        <h2 class="playlist-header-title">Piesne na dnes</h2>
+        <h2 class="playlist-header-title" id="dnes-title">Piesne na dnes</h2>
         <i class="fas fa-chevron-down section-chevron" id="dnes-chevron"></i>
       </div>
       <div id="dnes-section-wrapper" class="section-content" style="display:none;">
@@ -48,6 +49,7 @@
         <!-- EDITOR – až pod zoznamom -->
         <div id="dnes-editor-panel" style="display:none; background:#1e1e1e; padding:15px; border-radius:12px; margin:20px 0; border:1px solid #00bfff;">
           <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Editor – Piesne na dnes</h3>
+          <input type="text" id="dnes-name" placeholder="Názov zoznamu (napr. Piatok 16.1.)" maxlength="30" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
           <input type="text" id="dnes-search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterDnesSearch()" style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
           <div id="dnes-available-list" style="max-height:250px; overflow-y:auto; margin-bottom:15px; background:#121212; border-radius:8px; padding:5px; border:1px solid #333;"></div>
           <div id="dnes-selected-editor" style="margin-bottom:15px; max-height: 250px; overflow-y: auto; background: #121212; border-radius: 8px; padding: 5px; border: 1px solid #333;"></div>
@@ -88,6 +90,11 @@
       </div>
       <div id="all-section-wrapper" class="section-content" style="display:none;">
         <div id="piesne-list"></div>
+      </div>
+
+      <!-- TLAČIDLO AKTUALIZÁCIA – na konci, centrované, modré -->
+      <div style="text-align:center; margin-top: 40px;">
+        <button onclick="hardResetApp()" style="background:#00bfff; color:black; font-weight:bold; padding:12px 24px; border-radius:8px; border:none; cursor:pointer;">AKTUALIZOVAŤ APLIKÁCIU</button>
       </div>
 
     </div>
@@ -133,11 +140,11 @@
       <div id="song-content"></div>
 
       <div id="error-report-container" style="margin: 40px 0 60px 0; padding: 20px; background: #1a1a1a; border-radius: 12px; border: 1px solid #333;">
-        <p style="color: #00bfff; margin-top: 0; font-weight: bold; text-align: center;">Našiel si chybu? Napíš, opravím :)</p>
+        <p style="color: #00bfff; margin-top: 0; font-weight: bold; text-align: center;">Našiel/la si chybu? Napíš, opravím :)</p>
         <form id="error-form" onsubmit="submitErrorForm(event)">
           <input type="hidden" name="_subject" value="Chyba v piesni">
           <input type="text" name="meno" placeholder="Tvoje meno" required style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px; border:1px solid #444; background:#222; color:white; box-sizing: border-box;">
-          <textarea name="chyba" placeholder="Napr. chybný akord..." required style="width:100%; padding:10px; height:80px; border-radius:8px; border:1px solid #444; background:#222; color:white; box-sizing: border-box; font-family: inherit;"></textarea>
+          <textarea name="chyba" placeholder="Napr. chybný akord, preklep v texte..." required style="width:100%; padding:10px; height:80px; border-radius:8px; border:1px solid #444; background:#222; color:white; box-sizing: border-box; font-family: inherit;"></textarea>
           <button type="submit" id="submit-btn" style="width:100%; background:#00bfff; color:black; font-weight:bold; border-radius:8px; padding:12px; border:none;">ODOSLAŤ</button>
         </form>
         <p id="form-status" style="display:none; text-align:center; margin-top:10px; font-size:14px; color:#00ff00;">Chyba bola odoslaná!</p>
