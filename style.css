@@ -97,12 +97,12 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   overflow:hidden;
 }
 
-/* ✅ SONG ROW: smaller ID column + minimal padding (closer to edge) */
+/* ✅ SONG ROW: ID stĺpec sa prispôsobí obsahu (Mariánska 12.), ale neodsúva zbytočne */
 .song-row{
   display:grid;
-  grid-template-columns: 78px 1fr;   /* was 110px -> now much closer */
-  gap:10px;
-  padding:12px 12px;               /* keep same left padding for all lists */
+  grid-template-columns: max-content 1fr;  /* kľúčová zmena */
+  column-gap:10px;
+  padding:12px 12px;
   border-bottom:1px solid #333;
   color:#fff;
   background:#121212;
@@ -112,8 +112,13 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 .song-id{
   color:#00bfff;
   font-weight:900;
-  text-align:right;                 /* keeps alignment but not too far */
+  text-align:right;
   white-space:nowrap;
+
+  /* aby čísla neboli príliš široké, ale Mariánska sa zmestila */
+  min-width: 48px;         /* malé čísla pri kraji */
+  max-width: 140px;        /* Mariánska 12. sa zmestí */
+  padding-right: 2px;
 }
 
 .song-title{
@@ -121,11 +126,11 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   overflow-wrap:anywhere;
 }
 
-/* Playlists rows should visually match song rows */
+/* Playlists rows – zarovno ako song-row */
 .pl-row{
   display:grid;
-  grid-template-columns: 78px 1fr;
-  gap:10px;
+  grid-template-columns: max-content 1fr; /* rovnaká logika */
+  column-gap:10px;
   padding:12px 12px;
   border-bottom:1px solid #333;
   color:#fff;
@@ -133,11 +138,14 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   align-items:center;
 }
 .pl-row:last-child{ border-bottom:none; }
+
 .pl-icon{
   color:#00bfff;
   font-size:18px;
   text-align:right;
   white-space:nowrap;
+  min-width: 48px;
+  max-width: 140px;
 }
 
 /* Editor panels */
