@@ -87,7 +87,7 @@ function openSongById(id, source) {
     if (!s) return;
     if (source === 'dnes') currentModeList = dnesList();
     else if (source === 'all') currentModeList = [...songs];
-    else if (source === 'playlist') currentModeList = currentModeList; // držíme aktuálny playlist
+    else if (source === 'playlist') currentModeList = currentModeList; 
     currentSong = JSON.parse(JSON.stringify(s));
     transposeStep = 0; document.getElementById('transpose-val').innerText = "0";
     currentLevel = 1; updateSpeedUI(); stopAutoscroll();
@@ -113,7 +113,6 @@ function renderSong() {
     el.style.fontSize = fontSize + 'px';
 }
 
-/* ========== POSUN IBA V RÁMCI AKTUÁLNEHO REŽIMU ========== */
 function navigateSong(d) {
     const idx = currentModeList.findIndex(s => s.id === currentSong.id);
     const n = currentModeList[idx + d];
@@ -297,16 +296,17 @@ function setDnesIds(arr) {
     renderDnesSection();
 }
 
-// Uloženie / Načítanie z Google Disku
 async function saveDnesToDrive() {
     const ids = getDnesIds().join(',');
+    // Používame univerzálnu akciu 'save', názov súboru bude 'PiesneNaDnes'
     const url = `${SCRIPT_URL}?action=save&name=PiesneNaDnes&pwd=qwer&content=${encodeURIComponent(ids)}`;
     await fetch(url, { mode: 'no-cors' });
 }
 
 async function loadDnesFromDrive() {
     try {
-        const r = await fetch(`${SCRIPT_URL}?action=get&name=PiesneNaDnes`);
+        // OPRAVA: Pridaný parameter &t= pre zrušenie cache prehliadača
+        const r = await fetch(`${SCRIPT_URL}?action=get&name=PiesneNaDnes&t=${Date.now()}`);
         const t = await r.text();
         if (t) localStorage.setItem('piesne_dnes', t);
     } catch(e) {}
@@ -328,16 +328,6 @@ function renderDnesSection() {
         </div>`;
     }).join('');
     box.innerHTML = items + `<div style="border-bottom:1px solid #333;margin-bottom:10px;"></div>`;
-}
-
-function moveDnes(idx, d) {
-    const arr = getDnesIds();
-    const n = idx + d; if (n < 0 || n >= arr.length) return;
-    [arr[idx], arr[n]] = [arr[n], arr[idx]];
-    setDnesIds(arr);
-}
-function removeDnes(idx) {
-    const arr = getDnesIds(); arr.splice(idx, 1); setDnesIds(arr);
 }
 
 function openDnesEditor() {
@@ -385,7 +375,7 @@ function clearDnesSelection() {
 }
 function saveDnesEditor() {
     setDnesIds([...dnesSelectedIds]);
-    saveDnesToDrive(); // <-- ULOŽENIE NA DISK
+    saveDnesToDrive();
     closeDnesEditor();
 }
 
