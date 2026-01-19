@@ -23,10 +23,18 @@
 
   <!-- HEADER -->
   <div class="header">
+    <!-- LOGIN VĽAVO -->
+    <div class="header-left">
+      <button id="admin-toggle-btn" onclick="toggleAdminAuth()">
+        <i class="fas fa-user"></i>
+        <span>PRIHLÁSIŤ</span>
+      </button>
+    </div>
+
     <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
 
-    <div class="header-actions">
-      <button id="admin-toggle-btn" onclick="toggleAdminAuth()">PRIHLÁSIŤ</button>
+    <!-- HOME VPRAVO -->
+    <div class="header-right">
       <i class="fas fa-home" onclick="smartReset()"></i>
     </div>
   </div>
@@ -34,23 +42,22 @@
   <!-- ===== PIESNE NA DNES ===== -->
   <div class="section">
     <h2 class="section-title" onclick="toggleSection('dnes')">
-      <span id="dnes-title">Piesne na dnes</span>
+      <span id="dnes-title">PIESNE NA DNES</span>
       <i id="arrow-dnes" class="fas fa-chevron-down"></i>
     </h2>
 
     <div id="section-dnes" class="section-content hidden">
       <div id="dnes-section"></div>
 
-      <!-- EDITOR DNES (len po prihlásení sa odskryje cez JS) -->
       <div id="dnes-editor" class="editor hidden">
         <input id="dnes-name" placeholder="Názov zoznamu na dnes">
-        <input id="dnes-search" placeholder="Hľadať pieseň..." oninput="filterDnes()">
+        <input id="dnes-search" placeholder="Hľadať pieseň...">
 
         <div id="dnes-all"></div>
         <div id="dnes-selected"></div>
 
-        <button onclick="saveDnes()">ULOŽIŤ</button>
-        <button onclick="clearDnes()">VYMAZAŤ</button>
+        <button>ULOŽIŤ</button>
+        <button>VYMAZAŤ</button>
       </div>
     </div>
   </div>
@@ -58,23 +65,22 @@
   <!-- ===== PLAYLISTY ===== -->
   <div class="section">
     <h2 class="section-title" onclick="toggleSection('playlists')">
-      <span>Playlisty</span>
+      <span>PLAYLISTY</span>
       <i id="arrow-playlists" class="fas fa-chevron-down"></i>
     </h2>
 
     <div id="section-playlists" class="section-content hidden">
       <div id="playlists"></div>
 
-      <!-- EDITOR PLAYLIST (len po prihlásení sa odskryje cez JS) -->
       <div id="playlist-editor" class="editor hidden">
         <input id="playlist-name" placeholder="Názov playlistu">
-        <input id="playlist-search" placeholder="Hľadať pieseň..." oninput="filterPlaylist()">
+        <input id="playlist-search" placeholder="Hľadať pieseň...">
 
         <div id="playlist-all"></div>
         <div id="playlist-selected"></div>
 
-        <button onclick="savePlaylist()">ULOŽIŤ</button>
-        <button onclick="clearPlaylist()">VYMAZAŤ</button>
+        <button>ULOŽIŤ</button>
+        <button>VYMAZAŤ</button>
       </div>
     </div>
   </div>
@@ -87,12 +93,12 @@
     </h2>
 
     <div id="section-songs" class="section-content hidden">
-      <input id="search" placeholder="Hľadať pieseň..." oninput="filterSongs()">
+      <input id="search" placeholder="Hľadať pieseň...">
       <div id="song-list"></div>
     </div>
   </div>
 
-  <!-- ===== AKTUALIZOVAŤ APLIKÁCIU (ako nadpis sekcie) ===== -->
+  <!-- ===== AKTUALIZOVAŤ APLIKÁCIU ===== -->
   <div class="section">
     <h2 class="section-title" onclick="toggleSection('update')">
       <span>AKTUALIZOVAŤ APLIKÁCIU</span>
