@@ -1,121 +1,183 @@
 <!DOCTYPE html>
 <html lang="sk">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>Mládežnícky spevník NIŽNÁ</title>
 
-  <link rel="manifest" href="manifest.json?v=7">
+  <link rel="manifest" href="manifest.json?v=9">
   <meta name="theme-color" content="#00bfff">
-
-  <link rel="apple-touch-icon" href="icon.png?v=7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Spevník">
+  <link rel="apple-touch-icon" href="icon.png?v=9">
 
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css?v=9"/>
 
-  <link rel="stylesheet" href="style.css?v=7">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
+      });
+    }
+  </script>
 </head>
 <body>
+  <div class="container">
 
-<div class="container">
+    <button id="scroll-to-top" onclick="stopAutoscroll(); window.scrollTo({top: 0, behavior: 'smooth'})">
+      <i class="fas fa-arrow-up"></i>
+    </button>
 
-  <!-- HEADER -->
-  <div class="header">
-    <!-- LOGIN VĽAVO -->
-    <div class="header-left">
-      <button id="admin-toggle-btn" onclick="toggleAdminAuth()">
-        <i class="fas fa-user"></i>
-        <span>PRIHLÁSIŤ</span>
+    <!-- HEADER -->
+    <div style="display:flex; align-items:center; justify-content:center; position:relative; margin-bottom:20px; padding-top:10px; z-index:10000;">
+      <button id="admin-toggle-btn" onclick="toggleAdminAuth()" style="position:absolute; left:0; display:flex; align-items:center; gap:10px; background:none; border:none; color:#00bfff; cursor:pointer; padding:15px; font-weight:700;">
+        <i class="fas fa-user" style="font-size:24px;"></i>
+        <span id="admin-toggle-text" style="font-size:14px;">PRIHLÁSIŤ</span>
       </button>
+
+      <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
+
+      <i class="fas fa-home" style="position:absolute; right:0; font-size:1.5em; color:#00bfff; cursor:pointer; padding:15px;" onclick="smartReset()"></i>
     </div>
 
-    <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
+    <!-- LIST VIEW -->
+    <div id="song-list">
+      <input type="text" id="search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterSongs()"/>
 
-    <!-- HOME VPRAVO -->
-    <div class="header-right">
-      <i class="fas fa-home" onclick="smartReset()"></i>
-    </div>
-  </div>
-
-  <!-- ===== PIESNE NA DNES ===== -->
-  <div class="section">
-    <h2 class="section-title" onclick="toggleSection('dnes')">
-      <span id="dnes-title">PIESNE NA DNES</span>
-      <i id="arrow-dnes" class="fas fa-chevron-down"></i>
-    </h2>
-
-    <div id="section-dnes" class="section-content hidden">
-      <div id="dnes-section"></div>
-
-      <!-- EDITOR DNES (len po prihlásení sa odskryje cez JS) -->
-      <div id="dnes-editor" class="editor hidden">
-        <input id="dnes-name" placeholder="Názov zoznamu na dnes">
-        <input id="dnes-search" placeholder="Hľadať pieseň...">
-
-        <div id="dnes-all"></div>
-        <div id="dnes-selected"></div>
-
-        <button>ULOŽIŤ</button>
-        <button>VYMAZAŤ</button>
+      <!-- === PIESNE NA DNES === -->
+      <div class="section-header" onclick="toggleSection('dnes')">
+        <h2 class="playlist-header-title" id="dnes-title">PIESNE NA DNES</h2>
+        <i class="fas fa-chevron-down section-chevron" id="dnes-chevron"></i>
       </div>
-    </div>
-  </div>
+      <div id="dnes-section-wrapper" class="section-content" style="display:none;">
+        <div id="dnes-section"></div>
 
-  <!-- ===== PLAYLISTY ===== -->
-  <div class="section">
-    <h2 class="section-title" onclick="toggleSection('playlists')">
-      <span>PLAYLISTY</span>
-      <i id="arrow-playlists" class="fas fa-chevron-down"></i>
-    </h2>
+        <!-- EDITOR DNES (iba po prihlásení) -->
+        <div id="dnes-editor-panel" style="display:none;">
+          <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Editor – Piesne na dnes</h3>
 
-    <div id="section-playlists" class="section-content hidden">
-      <div id="playlists"></div>
+          <input type="text" id="dnes-name" placeholder="Názov zoznamu (napr. Piatok 16.1.)" maxlength="30"
+            style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
 
-      <!-- EDITOR PLAYLIST (len po prihlásení sa odskryje cez JS) -->
-      <div id="playlist-editor" class="editor hidden">
-        <input id="playlist-name" placeholder="Názov playlistu">
-        <input id="playlist-search" placeholder="Hľadať pieseň...">
+          <input type="text" id="dnes-search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterDnesSearch()"
+            style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
 
-        <div id="playlist-all"></div>
-        <div id="playlist-selected"></div>
+          <div id="dnes-available-list" style="max-height:250px; overflow-y:auto; margin-bottom:15px; background:#121212; border-radius:8px; padding:5px; border:1px solid #333;"></div>
+          <div id="dnes-selected-editor" style="margin-bottom:15px; max-height:250px; overflow-y:auto; background:#121212; border-radius:8px; padding:5px; border:1px solid #333;"></div>
 
-        <button>ULOŽIŤ</button>
-        <button>VYMAZAŤ</button>
+          <div>
+            <button onclick="saveDnesEditor()" style="background:#00bfff; color:black; font-weight:bold;">ULOŽIŤ</button>
+            <button onclick="closeDnesEditor()" style="background:#666; color:white; font-weight:bold;">ZRUŠIŤ</button>
+            <button onclick="clearDnesSelection()" style="background:#ff4444; color:white; font-weight:bold;">VYMAZAŤ</button>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <!-- ===== ZOZNAM PIESNÍ ===== -->
-  <div class="section">
-    <h2 class="section-title" onclick="toggleSection('songs')">
-      <span>ZOZNAM PIESNÍ</span>
-      <i id="arrow-songs" class="fas fa-chevron-down"></i>
-    </h2>
-
-    <div id="section-songs" class="section-content hidden">
-      <input id="search" placeholder="Hľadať pieseň...">
-      <div id="song-list"></div>
-    </div>
-  </div>
-
-  <!-- ===== AKTUALIZOVAŤ APLIKÁCIU ===== -->
-  <div class="section">
-    <h2 class="section-title" onclick="toggleSection('update')">
-      <span>AKTUALIZOVAŤ APLIKÁCIU</span>
-      <i id="arrow-update" class="fas fa-chevron-down"></i>
-    </h2>
-
-    <div id="section-update" class="section-content hidden">
-      <div class="update-box">
-        <button onclick="hardResetApp()">AKTUALIZOVAŤ APLIKÁCIU</button>
+      <!-- === PLAYLISTY === -->
+      <div class="section-header" onclick="toggleSection('playlists')">
+        <h2 class="playlist-header-title">PLAYLISTY</h2>
+        <i class="fas fa-chevron-down section-chevron" id="playlists-chevron"></i>
       </div>
+      <div id="playlists-section-wrapper" class="section-content" style="display:none;">
+        <div id="playlists-section"></div>
+
+        <!-- EDITOR PLAYLIST (iba po prihlásení) -->
+        <div id="admin-panel" style="display:none;">
+          <h3 style="color:#00bfff; margin-top:0; font-size:16px;">Editor playlistu</h3>
+
+          <input type="text" id="playlist-name" placeholder="Názov playlistu"
+            style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
+
+          <input type="text" id="playlist-search" placeholder="Hľadať pieseň alebo číslo..." autocomplete="off" oninput="filterPlaylistSearch()"
+            style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box;">
+
+          <div id="playlist-available-list" style="max-height:250px; overflow-y:auto; margin-bottom:15px; background:#121212; border-radius:8px; padding:5px; border:1px solid #333;"></div>
+          <div id="selected-list-editor" style="margin-bottom:15px; max-height:250px; overflow-y:auto; background:#121212; border-radius:8px; padding:5px; border:1px solid #333;"></div>
+
+          <div>
+            <button onclick="savePlaylist()" style="background:#00bfff; color:black; font-weight:bold;">ULOŽIŤ</button>
+            <button onclick="clearSelection()" style="background:#ff4444; color:white; font-weight:bold;">VYMAZAŤ</button>
+            <button onclick="logoutAdmin()" style="background:#666; color:white; font-weight:bold;">ZRUŠIŤ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ZOZNAM PIESNÍ === -->
+      <div class="section-header" onclick="toggleSection('all')">
+        <h2 class="playlist-header-title">ZOZNAM PIESNÍ</h2>
+        <i class="fas fa-chevron-down section-chevron" id="all-chevron"></i>
+      </div>
+      <div id="all-section-wrapper" class="section-content" style="display:none;">
+        <div id="piesne-list" style="text-align:center; padding:20px; color:#888;">Načítavam...</div>
+      </div>
+
+      <!-- === AKTUALIZOVAŤ APLIKÁCIU === -->
+      <div class="section-header" onclick="toggleSection('update')">
+        <h2 class="playlist-header-title">AKTUALIZOVAŤ APLIKÁCIU</h2>
+        <i class="fas fa-chevron-down section-chevron" id="update-chevron"></i>
+      </div>
+      <div id="update-section-wrapper" class="section-content" style="display:none;">
+        <div style="text-align:center; margin-top: 20px;">
+          <button onclick="hardResetApp()" style="background:#00bfff; color:black; font-weight:bold; padding:12px 24px; border-radius:12px; border:none; cursor:pointer;">
+            AKTUALIZOVAŤ APLIKÁCIU
+          </button>
+        </div>
+      </div>
+
     </div>
+
+    <!-- SONG DETAIL VIEW -->
+    <div id="song-detail" style="display:none;">
+      <h2 id="render-title"></h2>
+      <button class="back-btn" onclick="closeSong()"><i class="fas fa-arrow-left"></i> Späť na zoznam</button>
+
+      <div class="controls">
+        <div class="control-group">
+          <small>Pieseň</small>
+          <div class="btn-row">
+            <button onclick="navigateSong(-1)"><i class="fas fa-chevron-left"></i></button>
+            <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i></button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <small>Tónina: <span id="transpose-val">0</span></small>
+          <div class="btn-row">
+            <button onclick="transposeSong(-1)"><i class="fas fa-minus"></i></button>
+            <button onclick="resetTranspose()"><i class="fas fa-undo"></i></button>
+            <button onclick="transposeSong(1)"><i class="fas fa-plus"></i></button>
+          </div>
+          <span id="original-key-label" style="font-size:10px; color:#00bfff; margin-top:4px; font-weight:bold;">-</span>
+        </div>
+
+        <div class="control-group">
+          <small>Zobrazenie</small>
+          <div class="btn-row">
+            <button onclick="toggleChords()"><i class="fas fa-guitar"></i></button>
+            <button onclick="changeFontSize(-1)">A-</button>
+            <button onclick="changeFontSize(1)">A+</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <small>Auto-posun</small>
+          <div class="btn-row">
+            <button onclick="changeScrollSpeed(-1)"><i class="fas fa-minus"></i></button>
+            <button id="scroll-btn" onclick="toggleAutoscroll()"><i class="fas fa-play"></i></button>
+            <button onclick="changeScrollSpeed(1)"><i class="fas fa-plus"></i></button>
+          </div>
+          <span id="speed-label" style="font-size:10px; color:#00bfff; margin-top:4px; font-weight:bold;">Rýchlosť: 1</span>
+        </div>
+      </div>
+
+      <div id="song-content"></div>
+    </div>
+
   </div>
 
-</div>
-
-<script src="script.js?v=7"></script>
+  <script src="script.js?v=9"></script>
 </body>
 </html>
