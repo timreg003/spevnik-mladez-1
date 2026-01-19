@@ -1,35 +1,42 @@
+/* ===== ZÁKLAD ===== */
 body {
   margin: 0;
   font-family: 'Inter', sans-serif;
   background: #121212;
   color: #e0e0e0;
+  padding: 15px;
 }
 
 .container {
   max-width: 700px;
   margin: auto;
-  padding: 15px;
 }
 
+/* ===== HEADER ===== */
 .header {
   position: relative;
   text-align: center;
+  margin-bottom: 20px;
+  padding-top: 10px;
 }
 
 .main-title {
   font-size: 1.8em;
   font-weight: 700;
-  background: linear-gradient(90deg, #00bfff, #fff);
+  background: linear-gradient(90deg, #00bfff, #ffffff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  margin: 0;
 }
 
+/* ===== HEADER ACTIONS ===== */
 .header-actions {
   position: absolute;
   right: 0;
   top: 0;
   display: flex;
   gap: 10px;
+  align-items: center;
 }
 
 .header-actions i,
@@ -39,30 +46,60 @@ body {
   border: none;
   cursor: pointer;
   font-weight: 700;
+  font-size: 14px;
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* ===== SEKČNÉ NADPISY (PRESNE AKO PREDTÝM) ===== */
 .section {
-  margin-top: 25px;
+  border-top: 1px solid #333;
+  margin-top: 20px;
+  padding-top: 20px;
 }
 
 .section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
+  font-weight: 700;
+  font-size: 1.4em;
   text-transform: uppercase;
   letter-spacing: 1px;
+
+  background: linear-gradient(90deg, #00bfff, #ffffff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  text-align: center;
+  width: 100%;
+  margin: 0 0 15px 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
+/* šípky pri nadpisoch */
+.section-title i {
+  font-size: 0.9em;
+  color: #00bfff;
+  -webkit-text-fill-color: #00bfff;
+}
+
+/* ===== ZBALITEĽNÝ OBSAH ===== */
 .section-content.hidden {
   display: none;
 }
 
+/* ===== EDITORY ===== */
 .editor {
-  margin-top: 15px;
   background: #1e1e1e;
   padding: 15px;
-  border-radius: 10px;
+  border-radius: 12px;
+  border: 1px solid #00bfff;
+  margin-top: 15px;
 }
 
 .editor.hidden {
@@ -71,36 +108,96 @@ body {
 
 .editor input {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   margin-bottom: 10px;
-  background: #222;
-  border: 1px solid #333;
-  color: #fff;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: white;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: inherit;
 }
 
 .editor button {
   width: 100%;
-  padding: 10px;
-  margin-top: 5px;
   background: #00bfff;
   color: black;
   font-weight: bold;
-  border: none;
+  padding: 12px;
   border-radius: 8px;
+  border: none;
+  margin-top: 6px;
   cursor: pointer;
 }
 
-.update-box {
+/* ===== ZOZNAMY (piesne / playlisty / dnes) ===== */
+#dnes-section,
+#playlists,
+#song-list {
+  background: #1a1a1a;
+  border-radius: 12px;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+
+#dnes-section > div,
+#playlists > div,
+#song-list > div {
+  padding: 12px;
+  border-bottom: 1px solid #333;
+}
+
+#dnes-section > div:last-child,
+#playlists > div:last-child,
+#song-list > div:last-child {
+  border-bottom: none;
+}
+
+/* ===== INPUT SEARCH ===== */
+#search {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border-radius: 12px;
+  background: #1e1e1e;
+  color: #fff;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  outline: none;
+  box-sizing: border-box;
+}
+
+input::placeholder {
+  color: #888;
+}
+
+/* ===== PRÁZDNE STAVY ===== */
+.empty {
+  color: #666;
   text-align: center;
-  margin: 40px 0;
+  padding: 15px;
+  font-size: 14px;
+}
+
+/* ===== AKTUALIZOVAŤ APLIKÁCIU (tlačidlo vnútri rozbalenej sekcie) ===== */
+.update-box {
+  padding: 10px 0 25px 0;
+  text-align: center;
 }
 
 .update-box button {
   background: #00bfff;
   color: black;
-  padding: 14px 20px;
-  border-radius: 12px;
   border: none;
+  padding: 14px 22px;
+  border-radius: 14px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
+}
+
+/* ===== DROBNOSTI ===== */
+button:focus,
+input:focus {
+  outline: none;
 }
