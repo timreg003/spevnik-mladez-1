@@ -1,4 +1,9 @@
-/* Drag: nič neoznačuje text (inputs môžu) */
+/* Prevent pull-to-refresh on supported browsers */
+html, body {
+  overscroll-behavior-y: none; /* ✅ Android Chrome */
+}
+
+/* Drag: nothing selects text (inputs can) */
 *{
   -webkit-user-select: none;
   user-select: none;
@@ -43,7 +48,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 .main-title { font-size:1.8em; margin:0; }
 #render-title { font-size:1.6em; margin-bottom:5px; }
 
-/* Header (stable) */
 .topbar{
   display:grid;
   grid-template-columns: 110px 1fr 60px;
@@ -58,7 +62,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   background:none; border:none; color:#00bfff;
   cursor:pointer; padding:10px 6px;
   font-weight:700;
-  -webkit-tap-highlight-color:transparent;
 }
 #admin-toggle-btn i{ font-size:24px; }
 #admin-toggle-text{ font-size:14px; }
@@ -68,19 +71,15 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   color:#00bfff;
   cursor:pointer;
   padding:10px 6px;
-  -webkit-tap-highlight-color:transparent;
 }
 
-/* Section headers */
 .section-header{
   display:flex; justify-content:space-between; align-items:center;
   padding:10px 0; cursor:pointer;
   border-top:1px solid #333; margin-top:20px;
-  -webkit-tap-highlight-color:transparent;
 }
 .section-header h2{ margin:0; font-size:1.4em; text-transform:uppercase; letter-spacing:1px; }
 .section-chevron{ font-size:1.2em; color:#00bfff; margin-left:10px; }
-
 .section-content{ display:none; }
 
 #search{
@@ -89,7 +88,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   border:1px solid #333; outline:none; box-sizing:border-box;
 }
 
-/* Same container style everywhere */
 .list-box{
   background:#1a1a1a;
   border:1px solid #333;
@@ -97,10 +95,9 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   overflow:hidden;
 }
 
-/* ✅ SONG ROW: ID stĺpec sa prispôsobí obsahu (Mariánska 12.), ale neodsúva zbytočne */
 .song-row{
   display:grid;
-  grid-template-columns: max-content 1fr;  /* kľúčová zmena */
+  grid-template-columns: max-content 1fr;
   column-gap:10px;
   padding:12px 12px;
   border-bottom:1px solid #333;
@@ -108,28 +105,23 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   background:#121212;
 }
 .song-row:last-child{ border-bottom:none; }
-
 .song-id{
   color:#00bfff;
   font-weight:900;
   text-align:right;
   white-space:nowrap;
-
-  /* aby čísla neboli príliš široké, ale Mariánska sa zmestila */
-  min-width: 48px;         /* malé čísla pri kraji */
-  max-width: 140px;        /* Mariánska 12. sa zmestí */
-  padding-right: 2px;
+  min-width:48px;
+  max-width:140px;
+  padding-right:2px;
 }
-
 .song-title{
   word-break: break-word;
   overflow-wrap:anywhere;
 }
 
-/* Playlists rows – zarovno ako song-row */
 .pl-row{
   display:grid;
-  grid-template-columns: max-content 1fr; /* rovnaká logika */
+  grid-template-columns: max-content 1fr;
   column-gap:10px;
   padding:12px 12px;
   border-bottom:1px solid #333;
@@ -138,17 +130,15 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   align-items:center;
 }
 .pl-row:last-child{ border-bottom:none; }
-
 .pl-icon{
   color:#00bfff;
   font-size:18px;
   text-align:right;
   white-space:nowrap;
-  min-width: 48px;
-  max-width: 140px;
+  min-width:48px;
+  max-width:140px;
 }
 
-/* Editor panels */
 .editor-panel{
   display:none;
   background:#1e1e1e;
@@ -181,7 +171,6 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   margin-bottom:10px;
 }
 
-/* draggable rows in editors */
 .draggable-item{
   display:flex;
   align-items:center;
@@ -298,46 +287,7 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   background:#00bfff; color:black; font-weight:900;
   padding:12px 24px; border-radius:12px; border:none; cursor:pointer;
 }
-
-/* Error report */
-#error-report-container{
-  margin:40px 0 60px 0;
-  padding:20px;
-  background:#1a1a1a;
-  border-radius:12px;
-  border:1px solid #333;
-}
-.error-title{
-  color:#00bfff;
-  margin-top:0;
-  font-weight:bold;
-  text-align:center;
-}
-#error-form input, #error-form textarea{
-  width:100%;
-  padding:10px;
-  margin-bottom:10px;
-  border-radius:8px;
-  border:1px solid #444;
-  background:#222;
-  color:white;
-  box-sizing:border-box;
-  font-family:inherit;
-}
-#error-form textarea{ height:80px; }
-#submit-btn{
-  width:100%;
-  background:#00bfff;
-  color:black;
-  font-weight:bold;
-  border-radius:8px;
-  padding:12px;
-  border:none;
-  cursor:pointer;
-}
-#form-status{
-  text-align:center;
-  margin-top:10px;
-  font-size:14px;
-  color:#00ff00;
+.btn-update:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
 }
