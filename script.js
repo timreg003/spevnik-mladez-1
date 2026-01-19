@@ -19,7 +19,17 @@ function smartReset() {
     document.getElementById('search').value = "";
     currentModeList = [...songs]; filterSongs();
     loadPlaylistHeaders(); loadDnesFromDrive();
+    // PO NOVOM: všetky sekcie sú ZBALENÉ na začiatku
+    toggleSection('dnes', false);
+    toggleSection('playlists', false);
+    toggleSection('all', false);
     window.scrollTo(0,0);
+}
+
+function logoutAdmin() {
+    isAdmin = false; adminPassword = "";
+    document.getElementById('admin-panel').style.display = 'none';
+    selectedSongIds = []; renderAllSongs(); loadPlaylistHeaders();
 }
 
 async function parseXML() {
@@ -45,13 +55,10 @@ function processXML(xmlText) {
         else if (/^\d+$/.test(rawId)) displayId = rawId.replace(/^0+/, '');
         return { id: s.getElementsByTagName('ID')[0]?.textContent.trim(), title: s.getElementsByTagName('title')[0]?.textContent.trim(), originalId: rawId, displayId: displayId, origText: text };
     });
-
-    // ZORADENIE: čísla → Mariánske → textové
     songs.sort((a, b) => {
         const idA = a.originalId.toUpperCase(), idB = b.originalId.toUpperCase();
         const isNumA = /^\d+$/.test(idA), isNumB = /^\d+$/.test(idB);
         const isMarA = idA.startsWith('M'), isMarB = idB.startsWith('M');
-
         if (isNumA && !isNumB) return -1;
         if (!isNumA && isNumB) return 1;
         if (isNumA && isNumB) return parseInt(idA) - parseInt(idB);
@@ -60,7 +67,6 @@ function processXML(xmlText) {
         if (isMarA && isMarB) return (parseInt(idA.substring(1)) || 0) - (parseInt(idB.substring(1)) || 0);
         return a.title.localeCompare(b.title, 'sk');
     });
-
     filteredSongs = [...songs]; currentModeList = [...songs];
     renderAllSongs(); loadPlaylistHeaders(); loadDnesFromDrive();
 }
@@ -269,4 +275,20 @@ async function hardResetApp() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', parseXML);
+/* = SKRÝVANIE / ZOBRAZOVANIE SEKCIÍ = */
+function toggleSection(section, expand = null) {
+    const content = document.getElementById(section + '-section-wrapper');
+    const chevron = document.getElementById(section + '-chevron');
+    if (!content || !chevron) return;
+    const show = expand !== null ? expand : (content.style.display === 'none');
+    content.style.display = show ? 'block' : 'none';
+    chevron.className = show ? 'fas fa-chevron-up section-chevron' : 'fas fa-chevron-down section-chevron';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    parseXML();
+    // PO NOVOM: všetky sekcie začínajú ZBALENÉ
+    toggleSection('dnes', false);
+    toggleSection('playlists', false);
+    toggleSection('all', false);
+});
