@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>Mládežnícky spevník NIŽNÁ</title>
 
-  <link rel="manifest" href="manifest.json?v=6">
+  <link rel="manifest" href="manifest.json?v=7">
   <meta name="theme-color" content="#00bfff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Spevník">
-  <link rel="apple-touch-icon" href="icon.png?v=6">
+  <link rel="apple-touch-icon" href="icon.png?v=7">
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css?v=6"/>
+  <link rel="stylesheet" href="style.css?v=7"/>
 
   <script>
     if ('serviceWorker' in navigator) {
@@ -27,7 +27,6 @@
 
 <body>
 
-<!-- TOAST -->
 <div id="toast" class="toast" style="display:none;"></div>
 
 <div class="container">
@@ -63,14 +62,10 @@
         <div class="dnes-empty">Načítavam...</div>
       </div>
 
-      <!-- EDITOR DNES (len po prihlásení) -->
       <div id="dnes-editor-panel" class="editor-panel" style="display:none;">
         <h3 class="editor-title">Editor – Piesne na dnes</h3>
 
-        <!-- názov zoznamu (mení veľký nadpis) -->
         <input type="text" id="dnes-name" placeholder="Názov zoznamu (napr. Piatok 16.1.)" maxlength="40"/>
-
-        <!-- filter -->
         <input type="text" id="dnes-search" placeholder="Vyhľadať pieseň..." autocomplete="off" oninput="filterDnesSearch()"/>
 
         <div class="editor-subtitle">Všetky piesne (klikni pre pridanie)</div>
@@ -97,7 +92,6 @@
         <div class="dnes-empty">Načítavam...</div>
       </div>
 
-      <!-- EDITOR PLAYLIST (len po prihlásení) -->
       <div id="admin-panel" class="editor-panel" style="display:none;">
         <h3 class="editor-title">Editor playlistu</h3>
 
@@ -189,12 +183,11 @@
 
     <div id="song-content"></div>
 
-    <!-- ERROR REPORT (Formspree) -->
+    <!-- ERROR REPORT -->
     <div id="error-report-container">
       <p class="error-title">Našiel/la si chybu? Napíš, opravím :)</p>
 
       <form id="error-form" onsubmit="submitErrorForm(event)">
-        <!-- subject for Formspree -->
         <input type="hidden" name="_subject" id="error-subject" value="Chyba v piesni">
         <input type="hidden" name="piesen" id="error-song-hidden" value="">
 
@@ -210,6 +203,6 @@
 
 </div>
 
-<script src="script.js?v=6"></script>
+<script src="script.js?v=7"></script>
 </body>
 </html>
