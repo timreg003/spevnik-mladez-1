@@ -15,11 +15,37 @@ body {
 /* ===== HEADER ===== */
 .header {
   position: relative;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 20px;
   padding-top: 10px;
 }
 
+/* ĽAVÁ STRANA – LOGIN */
+.header-left {
+  position: absolute;
+  left: 0;
+}
+
+#admin-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #00bfff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px;
+}
+
+#admin-toggle-btn i {
+  font-size: 20px;
+}
+
+/* STRED – NADPIS */
 .main-title {
   font-size: 1.8em;
   font-weight: 700;
@@ -29,28 +55,20 @@ body {
   margin: 0;
 }
 
-/* ===== HEADER ACTIONS ===== */
-.header-actions {
+/* PRAVÁ STRANA – HOME */
+.header-right {
   position: absolute;
   right: 0;
-  top: 0;
-  display: flex;
-  gap: 10px;
-  align-items: center;
 }
 
-.header-actions i,
-.header-actions button {
+.header-right i {
+  font-size: 20px;
   color: #00bfff;
-  background: none;
-  border: none;
   cursor: pointer;
-  font-weight: 700;
-  font-size: 14px;
-  -webkit-tap-highlight-color: transparent;
+  padding: 10px;
 }
 
-/* ===== SEKČNÉ NADPISY (PRESNE AKO PREDTÝM) ===== */
+/* ===== SEKČNÉ NADPISY ===== */
 .section {
   border-top: 1px solid #333;
   margin-top: 20px;
@@ -77,15 +95,12 @@ body {
   gap: 12px;
 
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
 
-/* šípky pri nadpisoch */
 .section-title i {
   font-size: 0.9em;
   color: #00bfff;
-  -webkit-text-fill-color: #00bfff;
 }
 
 /* ===== ZBALITEĽNÝ OBSAH ===== */
@@ -114,72 +129,9 @@ body {
   border: 1px solid #444;
   color: white;
   border-radius: 8px;
-  box-sizing: border-box;
-  font-family: inherit;
 }
 
-.editor button {
-  width: 100%;
-  background: #00bfff;
-  color: black;
-  font-weight: bold;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  margin-top: 6px;
-  cursor: pointer;
-}
-
-/* ===== ZOZNAMY (piesne / playlisty / dnes) ===== */
-#dnes-section,
-#playlists,
-#song-list {
-  background: #1a1a1a;
-  border-radius: 12px;
-  border: 1px solid #333;
-  overflow: hidden;
-}
-
-#dnes-section > div,
-#playlists > div,
-#song-list > div {
-  padding: 12px;
-  border-bottom: 1px solid #333;
-}
-
-#dnes-section > div:last-child,
-#playlists > div:last-child,
-#song-list > div:last-child {
-  border-bottom: none;
-}
-
-/* ===== INPUT SEARCH ===== */
-#search {
-  width: 100%;
-  padding: 14px;
-  font-size: 16px;
-  border-radius: 12px;
-  background: #1e1e1e;
-  color: #fff;
-  margin-bottom: 15px;
-  border: 1px solid #333;
-  outline: none;
-  box-sizing: border-box;
-}
-
-input::placeholder {
-  color: #888;
-}
-
-/* ===== PRÁZDNE STAVY ===== */
-.empty {
-  color: #666;
-  text-align: center;
-  padding: 15px;
-  font-size: 14px;
-}
-
-/* ===== AKTUALIZOVAŤ APLIKÁCIU (tlačidlo vnútri rozbalenej sekcie) ===== */
+/* ===== UPDATE ===== */
 .update-box {
   padding: 10px 0 25px 0;
   text-align: center;
@@ -194,10 +146,4 @@ input::placeholder {
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
-}
-
-/* ===== DROBNOSTI ===== */
-button:focus,
-input:focus {
-  outline: none;
 }
