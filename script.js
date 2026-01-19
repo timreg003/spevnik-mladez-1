@@ -31,6 +31,7 @@ function smartReset() {
 function logoutAdmin() {
     isAdmin = false; adminPassword = "";
     document.getElementById('admin-panel').style.display = 'none';
+    selectedSongIds = [];
     renderAllSongs(); loadPlaylistHeaders();
 }
 
@@ -203,20 +204,25 @@ function renderEditor() {
     }).join('');
 }
 
-// NOVE: Ukladanie na pozadí bez nového okna
+// VRÁTENÁ FUNKCIA NA ÚPRAVU
+function editPlaylist(name) {
+    const cached = localStorage.getItem('playlist_' + name);
+    if (!cached) return;
+    selectedSongIds = cached.split(',').filter(x => x);
+    document.getElementById('playlist-name').value = name;
+    document.getElementById('admin-panel').style.display = 'block';
+    renderEditor(); window.scrollTo(0,0);
+}
+
 async function savePlaylist() {
     const name = document.getElementById('playlist-name').value;
     if (!name || !selectedSongIds.length) return alert('Zadaj názov');
-    
     const url = `${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=qwer&content=${selectedSongIds.join(',')}`;
-    
     try {
         await fetch(url, { mode: 'no-cors' });
-        alert('Playlist bol úspešne odoslaný na uloženie.');
-        setTimeout(() => { loadPlaylistHeaders(); logoutAdmin(); }, 1000);
-    } catch (e) {
-        alert('Chyba pri ukladaní.');
-    }
+        alert('Uložené.');
+        setTimeout(() => { loadPlaylistHeaders(); logoutAdmin(); }, 500);
+    } catch (e) { alert('Chyba.'); }
 }
 
 async function cacheAllPlaylists(playlistData) {
@@ -268,15 +274,27 @@ function renderPlaylists(d) {
     sect.innerHTML = html + `<div style="border-bottom:1px solid #333;margin-bottom:10px;"></div>`;
 }
 
-// NOVE: Mazanie na pozadí
 async function deletePlaylist(n) { 
     if (confirm(`Vymazať ${n}?`)) {
         try {
             await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(n)}&pwd=qwer`, { mode: 'no-cors' });
-            alert('Playlist bol zmazaný.');
-            setTimeout(() => { loadPlaylistHeaders(); }, 1000);
-        } catch(e) { alert('Chyba pri mazaní.'); }
+            alert('Zmazané.');
+            setTimeout(() => { loadPlaylistHeaders(); }, 500);
+        } catch(e) { alert('Chyba.'); }
     }
+}
+
+async function submitErrorForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.innerText = "ODOSIELAM...";
+    try {
+        await fetch("https://formspree.io/f/mvzzkwlw", { method: "POST", body: new FormData(e.target), headers: { 'Accept': 'application/json' } });
+        document.getElementById('form-status').style.display = "block";
+        e.target.reset();
+        setTimeout(() => { document.getElementById('form-status').style.display = "none"; }, 4000);
+    } catch (err) { alert("Chyba."); }
+    finally { btn.disabled = false; btn.innerText = "ODOSLAŤ"; }
 }
 
 document.addEventListener('DOMContentLoaded', parseXML);
