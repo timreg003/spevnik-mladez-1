@@ -71,7 +71,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
 }
 
 .editor-title{ color:#00bfff; margin-top:0; font-size:16px; }
-.editor-subtitle{ font-size:12px; opacity:0.8; margin:8px 0 6px; }
+.editor-subtitle{ font-size:12px; opacity:0.85; margin:8px 0 6px; }
 
 .editor-panel input{
   width:100%;
@@ -117,6 +117,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   user-select:none;
 }
 
+/* ✅ menšie + tlačidlo */
 .small-plus{
   width:28px; height:28px;
   border:none;
@@ -137,7 +138,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   cursor:pointer;
 }
 
-/* bottom buttons row */
+/* bottom buttons rows */
 .btn-row-3{
   display:flex;
   gap:10px;
@@ -150,6 +151,20 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   font-weight:800;
   cursor:pointer;
 }
+
+.btn-row-2{
+  display:flex;
+  gap:10px;
+}
+.btn-row-2 button{
+  flex:1;
+  padding:12px;
+  border-radius:8px;
+  border:none;
+  font-weight:800;
+  cursor:pointer;
+}
+
 .btn-save{ background:#00c853; color:#001b00; }   /* zelená */
 .btn-cancel{ background:#666; color:#fff; }      /* šedá */
 .btn-delete{ background:#ff4444; color:#fff; }   /* červená */
