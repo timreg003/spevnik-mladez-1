@@ -50,8 +50,4 @@ textarea { resize: none; outline: none; }
 .dnes-empty { color: #666; text-align: center; padding: 15px; font-size: 14px; }
 
 /* centrovanie nadpisu Piesne na dnes */
-#dnes-section-wrapper h2 {
-    text-align: center !important;
-    width: 100%;
-    margin: 25px 0 15px 0;
-}
+<h2 class="playlist-header-title" style="cursor:pointer;text-align:center;width:100%;display:block;" onclick="openDnesEditor()">Piesne na dnes <small style="font-size:10px;opacity:0.5;">(klikni pre úpravu)</small></h2>
