@@ -1,162 +1,113 @@
-/* ===== ZÁKLAD ===== */
-body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  background: #121212;
-  color: #e0e0e0;
-  padding: 15px;
-}
+body { margin: 0; font-family: 'Inter', sans-serif; background: #121212; color: #e0e0e0; padding: 15px; }
+.container { max-width: 700px; margin: auto; }
 
-.container {
-  max-width: 700px;
-  margin: auto;
-}
-
-/* ===== HEADER ===== */
-.header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  padding-top: 10px;
-}
-
-/* ĽAVÁ STRANA – LOGIN */
-.header-left {
-  position: absolute;
-  left: 0;
-}
-
-#admin-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #00bfff;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 10px;
+#piesne-list, #playlists-section, #dnes-section, .controls, .back-btn, .main-title, #render-title, .playlist-header-title {
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-/* IKONA PRIHLÁSENIA VÄČŠIA */
-#admin-toggle-btn i {
-  font-size: 24px;
-}
-
-/* STRED – NADPIS */
-.main-title {
-  font-size: 1.8em;
+.main-title, #render-title, .playlist-header-title {
   font-weight: 700;
   background: linear-gradient(90deg, #00bfff, #ffffff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin: 0;
+  text-align: center !important;
+  display: block !important;
+  width: 100% !important;
 }
 
-/* PRAVÁ STRANA – HOME */
-.header-right {
-  position: absolute;
-  right: 0;
-}
+.main-title { font-size: 1.8em; margin: 0; }
+#render-title { font-size: 1.6em; margin-bottom: 5px; }
 
-.header-right i {
-  font-size: 22px;
-  color: #00bfff;
+/* SEKČNÉ NADPISY + CHEVRON */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
   cursor: pointer;
-  padding: 10px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ===== SEKČNÉ NADPISY (PRESNE AKO PREDTÝM) ===== */
-.section {
   border-top: 1px solid #333;
   margin-top: 20px;
-  padding-top: 20px;
 }
+.section-header h2 { margin: 0; }
+.section-chevron { font-size: 1.2em; color: #00bfff; margin-left: 10px; }
 
-.section-title {
-  font-weight: 700;
-  font-size: 1.4em;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+/* SKRÝVANIE OBSAHU */
+.section-content { display: none; }
 
-  background: linear-gradient(90deg, #00bfff, #ffffff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-
-  text-align: center;
-  width: 100%;
-  margin: 0 0 15px 0;
-
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* šípky pri nadpisoch */
-.section-title i {
-  font-size: 0.9em;
-  color: #00bfff;
-  -webkit-text-fill-color: #00bfff;
-}
-
-/* ===== ZBALITEĽNÝ OBSAH ===== */
-.section-content.hidden {
-  display: none;
-}
-
-/* ===== EDITORY ===== */
-.editor {
+/* EDITORY */
+#dnes-editor-panel, #admin-panel {
   background: #1e1e1e;
   padding: 15px;
   border-radius: 12px;
+  margin: 20px 0;
   border: 1px solid #00bfff;
-  margin-top: 15px;
 }
 
-.editor.hidden {
-  display: none;
+/* TLAČIDLÁ V JEDNOM RIADKU */
+#dnes-editor-panel > div:last-child,
+#admin-panel > div:last-child {
+  display: flex;
+  gap: 10px;
+  flex-wrap: nowrap;
 }
 
-.editor input {
-  width: 100%;
+#dnes-editor-panel button,
+#admin-panel button {
+  flex: 1;
   padding: 12px;
-  margin-bottom: 10px;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  color: white;
   border-radius: 8px;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-
-/* ===== UPDATE ===== */
-.update-box {
-  padding: 10px 0 25px 0;
-  text-align: center;
-}
-
-.update-box button {
-  background: #00bfff;
-  color: black;
   border: none;
-  padding: 14px 22px;
-  border-radius: 14px;
-  font-size: 14px;
-  font-weight: 800;
+  font-weight: bold;
   cursor: pointer;
 }
 
-button:focus,
-input:focus {
+#search {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border-radius: 12px;
+  background: #1e1e1e;
+  color: #fff;
+  margin-bottom: 20px;
+  border: 1px solid #333;
   outline: none;
+  box-sizing: border-box;
 }
+
+.controls {
+  display: flex;
+  justify-content: space-around;
+  background: #1a1a1a;
+  padding: 10px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  gap: 5px;
+  border: 1px solid #333;
+  flex-wrap: wrap;
+}
+.control-group { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.btn-row { display: flex; background: #1e1e1e; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
+button { background: #1e1e1e; border: none; color: #fff; padding: 10px 14px; cursor: pointer; }
+
+#scroll-btn.active { background: #00bfff !important; color: black !important; }
+
+#scroll-to-top {
+  display: none; position: fixed; bottom: 30px; right: 20px; width: 60px; height: 60px; border-radius: 50%;
+  background: #00bfff; color: black; border: none; z-index: 99999; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  font-size: 24px; align-items: center; justify-content: center;
+}
+
+.back-btn {
+  background: none; color: #00bfff; font-size: 16px; border: none; cursor: pointer;
+  margin-bottom: 15px; width: 100%; text-align: center; font-weight: 600;
+}
+
+#song-content {
+  background: #1a1a1a; padding: 25px 15px; border-radius: 12px; line-height: 2.2; white-space: pre-wrap;
+  margin-top: 10px; font-size: 17px; text-align: center; color: #fff;
+}
+
+.chord { color: #00bfff; font-weight: bold; background: #252525; padding: 1px 4px; border-radius: 4px; }
+.dnes-empty { color: #666; text-align: center; padding: 15px; font-size: 14px; }
