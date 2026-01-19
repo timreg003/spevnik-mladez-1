@@ -8,9 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Spevník">
   <link rel="apple-touch-icon" href="icon.png">
-  <link rel="icon" type="image/png" href="icon.png">
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -26,10 +24,10 @@
 </head>
 <body>
   <div class="container">
-    <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px; padding-top: 10px;">
+    <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px; padding-top: 10px; z-index: 10000;">
       <i class="fas fa-lock" style="position: absolute; left: 0; opacity: 0.15; cursor: pointer; padding: 15px;" onclick="unlockAdmin()"></i>
       <h1 class="main-title">Mládežnícky spevník NIŽNÁ</h1>
-      <i class="fas fa-home" style="position: absolute; right: 0; font-size: 1.2em; color: #00bfff; cursor: pointer; padding: 15px; touch-action: manipulation;" onclick="smartReset()"></i>
+      <i class="fas fa-home" style="position: absolute; right: 0; font-size: 1.5em; color: #00bfff; cursor: pointer; padding: 15px; touch-action: manipulation;" onclick="smartReset()"></i>
     </div>
 
     <div id="song-list">
@@ -43,7 +41,7 @@
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <button onclick="savePlaylist()" style="flex: 2; min-width: 120px; background:#00bfff; color:black; font-weight:bold; padding:12px; border-radius:8px; border:none;">ULOŽIŤ</button>
             <button onclick="clearSelection()" style="flex: 1; min-width: 80px; background:#333; color:white; padding:12px; border-radius:8px; border:none;">ZMAZAŤ</button>
-            <button onclick="smartReset()" style="width: 100%; background:#444; color:white; padding:10px; border-radius:8px; border:none; margin-top:5px;">ZAVRIEŤ EDITOR</button>
+            <button onclick="smartReset()" style="width: 100%; background:#444; color:white; padding:12px; border-radius:8px; border:none; margin-top:10px; font-weight: bold;">ZRUŠIŤ EDITOR</button>
         </div>
       </div>
 
@@ -51,45 +49,25 @@
     </div>
 
     <div id="song-detail" style="display:none;">
-      <div style="text-align:center; margin-bottom:15px;">
-        <h2 id="render-title"></h2>
-      </div>
+      <h2 id="render-title"></h2>
       <button class="back-btn" onclick="closeSong()"><i class="fas fa-arrow-left"></i> Späť na zoznam</button>
       <div class="controls">
-        <div class="control-group">
-          <small>Pieseň</small>
-          <div class="btn-row">
+        <div class="control-group"><small>Pieseň</small><div class="btn-row">
             <button onclick="navigateSong(-1)"><i class="fas fa-chevron-left"></i></button>
             <button onclick="navigateSong(1)"><i class="fas fa-chevron-right"></i></button>
-          </div>
-        </div>
-        <div class="control-group">
-          <small>Tónina: <span id="transpose-val">0</span></small>
-          <div class="btn-row">
+        </div></div>
+        <div class="control-group"><small>Tónina: <span id="transpose-val">0</span></small><div class="btn-row">
             <button onclick="transposeSong(-1)"><i class="fas fa-minus"></i></button>
             <button onclick="resetTranspose()"><i class="fas fa-undo"></i></button>
             <button onclick="transposeSong(1)"><i class="fas fa-plus"></i></button>
-          </div>
-        </div>
-        <div class="control-group">
-          <small>Zobrazenie</small>
-          <div class="btn-row">
+        </div></div>
+        <div class="control-group"><small>Zobrazenie</small><div class="btn-row">
             <button onclick="toggleChords()"><i class="fas fa-guitar"></i></button>
             <button onclick="changeFontSize(-1)">A-</button>
             <button onclick="changeFontSize(1)">A+</button>
-          </div>
-        </div>
+        </div></div>
       </div>
       <div id="song-content"></div>
-
-      <div id="error-form-container" style="margin-top: 40px; padding: 20px; background: #1a1a1a; border-radius: 12px; border: 1px solid #333;">
-        <form id="error-form">
-          <input type="hidden" name="_subject" id="form-subject">
-          <input type="text" name="meno" placeholder="Vaše meno" required style="width:100%; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box; outline: none;">
-          <textarea name="sprava" placeholder="Popíšte chybu..." required style="width:100%; height:100px; padding:12px; margin-bottom:10px; background:#2a2a2a; border:1px solid #444; color:white; border-radius:8px; box-sizing:border-box; font-family:inherit; outline: none;"></textarea>
-          <button type="submit" id="form-submit-btn" style="width:100%; background:#333; color:#00bfff; font-weight:bold; padding:12px; border-radius:8px; border:1px solid #00bfff; cursor:pointer;">ODOSLAŤ CHYBU</button>
-        </form>
-      </div>
     </div>
   </div>
   <script src="script.js"></script>
