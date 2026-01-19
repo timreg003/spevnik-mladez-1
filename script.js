@@ -6,6 +6,7 @@ let transposeStep = 0, fontSize = 17, chordsVisible = true, isAdmin = false, sel
 const scale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H"];
 let autoscrollInterval = null;
 let currentLevel = 1;
+let currentListSource = 'all';   // 'all' | 'playlist' | 'dnes'
 
 window.addEventListener('scroll', () => {
     const btn = document.getElementById("scroll-to-top");
@@ -81,7 +82,9 @@ function renderAllSongs() {
 }
 
 function openSongById(id, source) {
-    const s = songs.find(x => x.id === id); if (!s) return;
+    currentListSource = source;
+    const s = songs.find(x => x.id === id);
+    if (!s) return;
     if (source === 'dnes') currentModeList = dnesList();
     else if (source === 'all') currentModeList = [...songs];
     else if (source === 'playlist') currentModeList = [...songs];
@@ -110,10 +113,14 @@ function renderSong() {
     el.style.fontSize = fontSize + 'px';
 }
 
+/* ========== POSUN IBA V RÁMCI AKTUÁLNEHO REŽIMU ========== */
 function navigateSong(d) {
     const idx = currentModeList.findIndex(s => s.id === currentSong.id);
     const n = currentModeList[idx + d];
-    if (n) { transposeStep = 0; openSongById(n.id, currentModeList === dnesList() ? 'dnes' : 'playlist'); }
+    if (n) {
+        transposeStep = 0;
+        openSongById(n.id, currentListSource);
+    }
 }
 
 function toggleAutoscroll() {
