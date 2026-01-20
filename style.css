@@ -1,6 +1,11 @@
 /* ✅ vypni pull-to-refresh tam, kde to browser podporuje */
 html, body { overscroll-behavior-y: none; }
 
+:root{
+  /* controlled by pinch-zoom in list view */
+  --list-font-size: 16px;
+}
+
 /* Drag: nič neoznačuje text (inputs môžu) */
 *{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 input, textarea{ -webkit-user-select:text !important; user-select:text !important; -webkit-touch-callout:default !important; }
@@ -85,6 +90,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   border-bottom:1px solid #333;
   color:#fff;
   background:#121212;
+  font-size: var(--list-font-size);
 }
 .song-row:last-child{ border-bottom:none; }
 .song-id{
@@ -104,12 +110,30 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   color:#fff;
   background:#121212;
   align-items:center;
+  font-size: var(--list-font-size);
 }
 .pl-row:last-child{ border-bottom:none; }
 .pl-icon{
   color:#00bfff; font-size:18px;
   text-align:right; white-space:nowrap;
   min-width:48px; max-width:140px;
+}
+
+.pl-back{
+  background:none;
+  border:1px solid #333;
+  border-radius:10px;
+  padding:8px 10px;
+  color:#00bfff;
+  font-weight:800;
+}
+.pl-edit{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  border:1px solid #333;
+  background:#1e1e1e;
+  color:#00bfff;
 }
 
 .editor-panel{
@@ -141,6 +165,7 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   gap:10px; padding:10px 10px;
   border-bottom:1px solid #333;
   color:#fff; background:#121212;
+  font-size: var(--list-font-size);
   touch-action: pan-y;
 }
 .draggable-item:last-child{ border-bottom:none; }
@@ -187,11 +212,21 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 #scroll-btn.active{ background:#00bfff !important; color:black !important; }
 
 #scroll-to-top{
-  display:none; position:fixed; bottom:30px; right:20px;
-  width:60px; height:60px; border-radius:50%;
-  background:#00bfff; color:black; border:none; z-index:99999;
-  box-shadow:0 4px 20px rgba(0,0,0,0.6);
-  font-size:24px; align-items:center; justify-content:center;
+  display:none;
+  position:fixed;
+  right: 16px;
+  bottom: 18px;
+  width:54px;
+  height:54px;
+  border-radius:999px;
+  border:1px solid #333;
+  background:#1e1e1e;
+  color:#00bfff;
+  z-index:99999;
+  box-shadow:0 8px 30px rgba(0,0,0,0.55);
+  font-size:20px;
+  align-items:center;
+  justify-content:center;
 }
 
 .back-btn{
