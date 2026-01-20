@@ -243,7 +243,7 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   white-space:pre-wrap;
   margin-top:10px;
   font-size:17px;
-  text-align:center;
+  text-align:left;
   color:#fff;
 }
 .chord{ color:#00bfff; font-weight:bold; background:#252525; padding:1px 4px; border-radius:4px; }
@@ -438,36 +438,14 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 
 .form-order{ display:flex; flex-wrap:wrap; gap:8px; }
 .chip{
-  display:flex;
-  align-items:center;
   background:#222;
   color:#fff;
   border-radius:999px;
-  padding:6px 8px;
+  padding:8px 12px;
   font-weight:900;
-  user-select:none;
-}
-
-.chip-text{
-  padding:0 8px;
   cursor:pointer;
   user-select:none;
-  text-align:center;
 }
-
-.chip-move{
-  width:32px;
-  height:32px;
-  border-radius:999px;
-  border:none;
-  background:#2f2f2f;
-  color:#fff;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-.chip-move:disabled{ opacity:0.45; cursor:default; }
 .chip.special{
   background:rgba(0,191,255,0.15);
   color:#00bfff;
@@ -514,3 +492,38 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   font-weight:900;
   font-size:1.2em;
 }
+
+.song-marker{
+  display:block;
+  width:100%;
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.15em;
+  text-align:left;
+}
+.song-special{
+  display:block;
+  width:100%;
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.2em;
+  text-align:left;
+}
+.song-transpose-line{
+  display:block;
+  width:100%;
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.2em;
+  text-align:left;
+}
+
+.history-card{ border:1px solid #2b2b2b; border-radius:12px; padding:10px; margin:10px 0; background:#121212; }
+.history-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; cursor:pointer; }
+.history-title{ font-weight:900; color:#fff; flex:1; }
+.history-del{ background:#333; color:#fff; border:none; border-radius:10px; padding:6px 10px; cursor:pointer; }
+.history-songs{ max-height:240px; overflow:auto; -webkit-overflow-scrolling:touch; border-top:1px solid #222; padding-top:8px; }
+.history-line{ display:flex; gap:10px; padding:6px 0; border-bottom:1px dashed #222; }
+.history-line:last-child{ border-bottom:none; }
+.history-line .hid{ color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap; }
+.history-line .htitle{ flex:1; overflow-wrap:anywhere; }
