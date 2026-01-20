@@ -64,7 +64,7 @@ const LS_PLAYLIST_INDEX = "playlist_index";
 const LS_PLAYLIST_ORDER = "playlist_order";
 
 const LS_HISTORY = "history_log";
-const HISTORY_NAME = "History";
+const HISTORY_NAME = "HistoryLog";
 
 
 function normText(s){
@@ -235,8 +235,7 @@ function goHomeUI() {
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
-  toggleSection('history', false);
-  toggleSection('all', false);
+    toggleSection('all', false);
 
   window.scrollTo(0,0);
 }
@@ -786,6 +785,170 @@ function addToDnesSelection(id) {
   }
 }
 
+
+let formModalIdx = null;
+let formModalSongId = null;
+let formModalOrder = [];
+let formModalAvailable = [];
+let formModalIsSaving = false;
+
+function tokenizeOrderStr(orderStr){
+  const s = (orderStr||"").trim();
+  if (!s) return [];
+  const out = [];
+  let cur = "";
+  let depth = 0;
+  for (const ch of s){
+    if (ch === '(') depth++;
+    if (ch === ')') depth = Math.max(0, depth-1);
+    if (ch === ',' && depth === 0){
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+function joinOrderTokens(tokens){
+  return (tokens||[]).map(t => t.trim()).filter(Boolean).join(',');
+}
+
+function extractAvailableMarkersFromSong(song){
+  const lines = (song.origText || "").split(/\r?\n/);
+  const markerRe = /^(\d+\.|R\d*:\s*|B\d*:\s*)\s*$/;
+  const set = new Set();
+  for (const ln of lines){
+    const t = ln.trim();
+    if (markerRe.test(t)) set.add(t.replace(/\s+/g,''));
+  }
+  const arr = Array.from(set);
+  arr.sort((a,b)=>{
+    const an = /^\d+\./.test(a), bn = /^\d+\./.test(b);
+    if (an && bn) return parseInt(a) - parseInt(b);
+    if (an && !bn) return -1;
+    if (!an && bn) return 1;
+    const ar = /^R\d*:/.test(a), br = /^R\d*:/.test(b);
+    if (ar && !br) return -1;
+    if (!ar && br) return 1;
+    return a.localeCompare(b,'sk');
+  });
+  return arr;
+}
+
+function buildPreviewHtml(song){
+  const lines = (song.origText || "").split(/\r?\n/).slice(0, 160);
+  const markerRe = /^(\d+\.|R\d*:\s*|B\d*:\s*)\s*$/;
+  return lines.map((ln,idx)=>{
+    const t = ln.trim();
+    if (markerRe.test(t)) return `<div class="mk">${escapeHtml(t.replace(/\s+/g,''))}</div>`;
+    if (idx === 0 && /^[+-]\d+$/.test(t)) return `<div class="mk">Transpozícia v texte: ${escapeHtml(t)}</div>`;
+    return `<div>${escapeHtml(ln)}</div>`;
+  }).join('');
+}
+
+function openFormModal(idx){
+  if (!isAdmin) return;
+  formModalIdx = idx;
+  formModalSongId = dnesSelectedIds[idx];
+  const s = songs.find(x => x.id === formModalSongId);
+  if (!s) return;
+
+  const titleEl = document.getElementById('form-modal-title');
+  if (titleEl) titleEl.textContent = `${s.displayId}. ${s.title}`;
+
+  formModalAvailable = extractAvailableMarkersFromSong(s);
+  formModalOrder = tokenizeOrderStr((dnesItems[idx]?.order || "").trim());
+
+  const prev = document.getElementById('form-preview');
+  if (prev) prev.innerHTML = buildPreviewHtml(s);
+
+  renderFormModalButtons();
+  renderFormModalOrder();
+  setFormModalSaving(false);
+
+  const modal = document.getElementById('form-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeFormModal(){
+  const modal = document.getElementById('form-modal');
+  if (modal) modal.style.display = 'none';
+  formModalIdx = null;
+  formModalSongId = null;
+  formModalOrder = [];
+  formModalAvailable = [];
+}
+
+function setFormModalSaving(on){
+  formModalIsSaving = on;
+  const btn = document.getElementById('form-modal-save');
+  if (!btn) return;
+  if (on){
+    btn.classList.add('disabled');
+    btn.disabled = true;
+  } else {
+    btn.classList.remove('disabled');
+    btn.disabled = false;
+  }
+}
+
+function renderFormModalButtons(){
+  const box = document.getElementById('form-buttons');
+  if (!box) return;
+  box.innerHTML = formModalAvailable.map(m => `<button class="chip-btn" onclick="addOrderToken('${m}')">${escapeHtml(m)}</button>`).join('');
+}
+
+function renderFormModalOrder(){
+  const box = document.getElementById('form-order');
+  if (!box) return;
+  if (!formModalOrder.length){
+    box.innerHTML = '<div style="opacity:0.75;">Zatiaľ žiadne poradie. Klikni na časti nižšie.</div>';
+    return;
+  }
+  box.innerHTML = formModalOrder.map((t, i) => {
+    const isSpecial = /^(PREDOHRA|MEDZIHRA|DOHRA)\b/i.test(t);
+    const cls = isSpecial ? 'chip special' : 'chip';
+    return `<div class="${cls}" onclick="removeOrderToken(${i})">${escapeHtml(t)}</div>`;
+  }).join('');
+}
+
+function addOrderToken(tok){
+  const t = (tok||"").trim();
+  if (!t) return;
+  formModalOrder.push(t);
+  renderFormModalOrder();
+}
+
+function removeOrderToken(i){
+  if (i < 0 || i >= formModalOrder.length) return;
+  formModalOrder.splice(i,1);
+  renderFormModalOrder();
+}
+
+function addSpecialStep(kind){
+  const note = prompt(`${kind} – poznámka (voliteľné):`, "");
+  if (note === null) return;
+  const token = note.trim() ? `${kind}(${note.trim()})` : `${kind}`;
+  formModalOrder.push(token);
+  renderFormModalOrder();
+}
+
+function saveFormModal(){
+  if (!isAdmin) return;
+  if (formModalIdx === null) return;
+  setFormModalSaving(true);
+
+  const orderStr = joinOrderTokens(formModalOrder);
+  dnesItems[formModalIdx].order = orderStr;
+
+  renderDnesSelected();
+  closeFormModal();
+  setFormModalSaving(false);
+}
+
 function editDnesOrder(idx){
   if (!isAdmin) return;
   const it = dnesItems[idx];
@@ -825,7 +988,7 @@ function renderDnesSelected() {
           </div>
           ${badge}
         </div>
-        <button class="small-plus" title="Forma" onclick="event.stopPropagation(); editDnesOrder(${idx})"><i class="fas fa-list"></i></button>
+        <button class="small-plus" title="Forma" onclick="event.stopPropagation(); openFormModal(${idx})"><i class="fas fa-list"></i></button>
         <span class="drag-handle"><i class="fas fa-grip-lines"></i></span>
         <button class="small-del" onclick="removeDnesAt(${idx})">X</button>
       </div>`;
@@ -1574,8 +1737,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
-  toggleSection('history', false);
-  toggleSection('all', false);
+    toggleSection('all', false);
 
   const __pn = document.getElementById('playlist-name');
   if (__pn) __pn.addEventListener('input', () => { updatePlaylistSaveEnabled(); playlistDirty = true; });
