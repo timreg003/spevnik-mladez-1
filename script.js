@@ -132,6 +132,8 @@ function goHomeUI() {
   closeSong();
   playlistViewName = null;
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
   document.getElementById('search').value = "";
   filterSongs();
 
@@ -156,6 +158,8 @@ function toggleAdminAuth() {
     openDnesEditor(true);
     openPlaylistEditorNew(true);
     renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
   } else {
     logoutAdmin();
   }
@@ -614,6 +618,8 @@ async function loadPlaylistsFromDrive() {
 
   playlistsFetchInFlight = false;
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
 }
 
 
@@ -676,12 +682,16 @@ function openPlaylist(nameEnc) {
   playlistViewName = name;
   toggleSection('playlists', true);
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
   window.scrollTo(0,0);
 }
 
 function closePlaylistView(){
   playlistViewName = null;
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
 }
 
 function renderPlaylistSongsView(name){
@@ -711,6 +721,17 @@ function renderPlaylistSongsView(name){
 }
 
 /* ===== PLAYLIST EDITOR ===== */
+
+function newPlaylist(){
+  // reset editor so user can create another playlist without overwriting
+  openPlaylistEditorNew(true);
+  const nameEl = document.getElementById('playlist-name');
+  if (nameEl) nameEl.value = '';
+  selectedSongIds = [];
+  editingPlaylistName = null;
+  renderPlaylistAvailable();
+  renderPlaylistSelection();
+}
 function openPlaylistEditorNew(silent=false){
   if (!isAdmin && !silent) return;
   editingPlaylistName = null;
@@ -839,11 +860,14 @@ async function savePlaylist(){
   localStorage.setItem(LS_PLAYLIST_INDEX, JSON.stringify(names));
   localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
 
-  editingPlaylistName = newName;
+  // reset editor to allow creating a new playlist immediately
+  editingPlaylistName = null;
 
   // update UI immediately
   playlistViewName = null;
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
 
   // persist to Drive
   try {
@@ -879,6 +903,8 @@ function editPlaylist(nameEnc){
   // if we were inside playlist view, jump out so user sees editor
   playlistViewName = null;
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
   toggleSection('playlists', true);
 }
 
@@ -898,6 +924,8 @@ async function deletePlaylist(nameEnc){
   if (playlistViewName === name) playlistViewName = null;
 
   renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
 
   try {
     try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
@@ -930,6 +958,8 @@ function onDrop(ev, ctx) {
     moveInArray(playlistOrder, from, to);
     localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
     renderPlaylistsUI(true);
+  // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
     // best-effort persist order
     if (isAdmin) {
       try { fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' }); } catch(e) {}
