@@ -58,12 +58,25 @@ const LS_SONG_FONT_SIZE = 'song_font_size';
 const LS_PLAYLIST_INDEX = "playlist_index";
 const LS_PLAYLIST_ORDER = "playlist_order";
 
+const LS_HISTORY = "history_log";
+const HISTORY_NAME = "History";
+
 
 function normText(s){
   return String(s || "")
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g,'');
+}
+
+
+function todayLabelSk(d){
+  const dt = d ? new Date(d) : new Date();
+  const days = ["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
+  const day = days[dt.getDay()];
+  const dd = dt.getDate();
+  const mm = dt.getMonth()+1;
+  return `${day} ${dd}.${mm}.`;
 }
 
 /* ===== TOAST ===== */
@@ -210,11 +223,14 @@ function goHomeUI() {
   closeSong();
   playlistViewName = null;
   renderPlaylistsUI(true);
+  loadHistoryCacheFirst(true);
+    loadHistoryCacheFirst(true);
   document.getElementById('search').value = "";
   filterSongs();
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
+  toggleSection('history', false);
   toggleSection('all', false);
 
   window.scrollTo(0,0);
@@ -236,6 +252,7 @@ function toggleAdminAuth() {
     openDnesEditor(true);
     openPlaylistEditorNew(true);
     renderPlaylistsUI(true);
+  loadHistoryCacheFirst(true);
   } else {
     logoutAdmin();
   }
@@ -311,10 +328,12 @@ function processXML(xmlText) {
   // cache-first (no flicker)
   loadDnesCacheFirst(false);
   loadPlaylistsCacheFirst(false);
+  loadHistoryCacheFirst(false);
 
   // then refresh
   loadDnesFromDrive();
   loadPlaylistsFromDrive();
+  loadHistoryFromDrive();
 }
 
 /* ===== SONG LIST ===== */
@@ -653,6 +672,125 @@ async function saveDnesEditor() {
   }
 }
 
+
+/* ===== HISTÓRIA (public) ===== */
+let historyFetchInFlight = false;
+
+function parseHistory(raw){
+  const t = (raw || "").trim();
+  if (!t) return [];
+  try {
+    const arr = JSON.parse(t);
+    return Array.isArray(arr) ? arr : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function loadHistoryCacheFirst(showEmptyAllowed){
+  const box = document.getElementById('history-section');
+  if (!box) return;
+
+  const items = parseHistory(localStorage.getItem(LS_HISTORY) || "");
+  if (!items.length){
+    if (!showEmptyAllowed && historyFetchInFlight){
+      box.innerHTML = '<div class="loading">Načítavam...</div>';
+      return;
+    }
+    box.innerHTML = '<div class="dnes-empty">Zatiaľ žiadna história.</div>';
+    return;
+  }
+
+  // newest first
+  const sorted = [...items].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.ts||0)-(a.ts||0));
+
+  box.innerHTML = sorted.map((h) => {
+    const title = h.label || h.date || "Záznam";
+    const meta = h.date ? h.date : "";
+    const delBtn = isAdmin ? `<button class="history-del" onclick="event.stopPropagation(); deleteHistoryEntry(${h.ts||0})">X</button>` : '';
+    const songRows = (h.songs || []).map(id => {
+      const s = songs.find(x => x.id === String(id));
+      if (!s) return '';
+      return `
+        <div class="song-row" onclick="openSongById('${s.id}','all')">
+          <div class="song-id">${escapeHtml(s.displayId)}.</div>
+          <div class="song-title">${escapeHtml(s.title)}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="history-card">
+        <div class="history-head">
+          <div style="min-width:0;">
+            <div class="history-title">${escapeHtml(title)}</div>
+            <div class="history-meta">${escapeHtml(meta)}</div>
+          </div>
+          ${delBtn}
+        </div>
+        ${songRows}
+      </div>`;
+  }).join('');
+}
+
+async function loadHistoryFromDrive(){
+  historyFetchInFlight = true;
+  loadHistoryCacheFirst(false);
+  try {
+    const r = await fetch(`${SCRIPT_URL}?action=get&name=${HISTORY_NAME}&t=${Date.now()}`);
+    const t = await r.text();
+    if (t != null) localStorage.setItem(LS_HISTORY, t.trim());
+  } catch(e) {}
+  historyFetchInFlight = false;
+  loadHistoryCacheFirst(true);
+}
+
+function buildHistoryEntryFromCurrentDnes(){
+  const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
+  const ids = (payload.items && payload.items.length) ? payload.items.map(it => it.id || it.songId).filter(Boolean) : getDnesIds();
+  const now = Date.now();
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const iso = `${yyyy}-${mm}-${dd}`;
+  return {
+    ts: now,
+    date: iso,
+    label: todayLabelSk(d),
+    title: payload.title || DNES_DEFAULT_TITLE,
+    songs: ids.map(String)
+  };
+}
+
+async function saveDnesToHistory(){
+  if (!isAdmin) return;
+  showToast('Ukladám do histórie…', true);
+
+  const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
+  arr.push(buildHistoryEntryFromCurrentDnes());
+  localStorage.setItem(LS_HISTORY, JSON.stringify(arr));
+  loadHistoryCacheFirst(true);
+
+  try {
+    await fetch(`${SCRIPT_URL}?action=save&name=${HISTORY_NAME}&pwd=${ADMIN_PWD}&content=__DELETED__${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+    showToast('Uložené do histórie ✅', true);
+  } catch(e) {
+    showToast('Nepodarilo sa uložiť do histórie ❌', false);
+  }
+}
+
+function deleteHistoryEntry(ts){
+  if (!isAdmin) return;
+  if (!confirm('Vymazať tento záznam z histórie?')) return;
+  const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
+  const next = arr.filter(x => Number(x.ts) !== Number(ts));
+  localStorage.setItem(LS_HISTORY, JSON.stringify(next));
+  loadHistoryCacheFirst(true);
+  try {
+    fetch(`${SCRIPT_URL}?action=save&name=${HISTORY_NAME}&pwd=${ADMIN_PWD}&content=__DELETED__${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' });
+  } catch(e) {}
+}
+
 /* ===== PLAYLISTY (no flicker) ===== */
 let playlistsFetchInFlight = false;
 let playlistViewName = null; // when set, playlists section shows songs inside that playlist
@@ -682,6 +820,7 @@ function loadPlaylistsCacheFirst(showEmptyAllowed) {
 async function loadPlaylistsFromDrive() {
   playlistsFetchInFlight = true;
   loadPlaylistsCacheFirst(false);
+  loadHistoryCacheFirst(false);
 
   let list = [];
   try {
@@ -1221,6 +1360,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
+  toggleSection('history', false);
   toggleSection('all', false);
 
   const __pn = document.getElementById('playlist-name');
