@@ -411,9 +411,12 @@ function openSongById(id, source) {
     const it = (payload.items||[]).find(x => String(x.songId) === String(id));
     currentDnesOrder = historyActiveOrder || (it ? String(it.order||'') : '');
   } else if (source === 'playlist') {
+    currentDnesOrder = '';
+ {
     // already set
   } else {
     currentModeList = [...songs];
+    currentDnesOrder = '';
   }
 
   currentSong = JSON.parse(JSON.stringify(s));
@@ -586,6 +589,9 @@ function renderSong() {
   if (!chordsVisible) {
     text = text.replace(/\[.*?\]/g, '');
   }
+
+  // Failsafe: never show empty content
+  if (!text || !text.trim()) text = currentSong.origText || '';
 
   // Style special lines / markers (keep \n, rely on pre-wrap in CSS)
   // +1 / -2 (samostatný riadok) -> Transpozícia
@@ -1294,6 +1300,9 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
 
 
 async function openPlaylistAndRender(name){
+  // show loading immediately
+  const sect = document.getElementById('playlists-section');
+  if (sect) sect.innerHTML = '<div class="loading">Načítavam...</div>';
   await fetchPlaylistContent(name);
   playlistViewName = name;
   toggleSection('playlists', true);
