@@ -43,6 +43,8 @@ let autoscrollInterval = null, currentLevel = 1;
 let isAdmin = false;
 
 let dnesSelectedIds = [];
+let dnesDirty = false;
+let playlistDirty = false;
 // Default title shown when the list is empty / freshly cleared
 const DNES_DEFAULT_TITLE = "PIESNE NA DNES";
 let dnesTitle = DNES_DEFAULT_TITLE;
@@ -107,6 +109,14 @@ function updatePlaylistSaveEnabled(){
     btn.disabled = false;
   }
 }
+
+function confirmDiscardEdits(){
+  if (!isAdmin) return true;
+  if (dnesDirty || playlistDirty){
+    return confirm('Máš neuložené zmeny v editore. Naozaj chceš pokračovať bez uloženia?');
+  }
+  return true;
+}
 function showToast(message, ok=true){
   const t = document.getElementById("toast");
   if (!t) return;
@@ -169,6 +179,11 @@ window.addEventListener('scroll', () => {
 function toggleEditor(panelId){
   const panel = document.getElementById(panelId);
   if (!panel) return;
+  const willCollapse = !panel.classList.contains('collapsed');
+  if (willCollapse){
+    if (panelId === 'dnes-editor-panel' && dnesDirty && !confirm('Máš neuložené zmeny v editore Piesne na dnes. Zbaliť bez uloženia?')) return;
+    if (panelId === 'admin-panel' && playlistDirty && !confirm('Máš neuložené zmeny v editore playlistu. Zbaliť bez uloženia?')) return;
+  }
   panel.classList.toggle('collapsed');
   const ico = panel.querySelector('.editor-toggle-ico');
   if (ico){
@@ -190,6 +205,7 @@ function toggleSection(section, expand = null) {
 
 /* ===== HOME UI ===== */
 function goHomeUI() {
+  if (!confirmDiscardEdits()) return;
   stopAutoscroll();
   closeSong();
   playlistViewName = null;
@@ -225,6 +241,7 @@ function toggleAdminAuth() {
   }
 }
 function logoutAdmin() {
+  if (!confirmDiscardEdits()) return;
   isAdmin = false;
   document.getElementById('admin-toggle-text').innerText = "PRIHLÁSIŤ";
   document.getElementById('dnes-editor-panel').style.display = 'none';
@@ -325,7 +342,11 @@ function filterSongs() {
     return title.includes(q) || id.includes(q);
   });
   renderAllSongs();
-  if (q.length > 0) toggleSection('all', true);
+  if (q.length > 0) {
+    toggleSection('all', true);
+    toggleSection('dnes', false);
+    toggleSection('playlists', false);
+  }
 }
 
 /* ===== SONG DETAIL ===== */
@@ -355,7 +376,7 @@ function openSongById(id, source) {
   document.getElementById('render-title').innerText = `${s.displayId}. ${s.title}`;
 
   const firstChordMatch = s.origText.match(/\[(.*?)\]/);
-  document.getElementById('original-key-label').innerText = "Tónina: " + (firstChordMatch ? firstChordMatch[1] : "-");
+  document.getElementById('original-key-label').innerText = "Pôvodná tónina: " + (firstChordMatch ? firstChordMatch[1] : "-");
 
   const subj = document.getElementById('error-subject');
   const hidden = document.getElementById('error-song-hidden');
@@ -369,7 +390,11 @@ function closeSong() {
   stopAutoscroll();
   document.getElementById('song-detail').style.display = 'none';
   document.getElementById('song-list').style.display = 'block';
+  const __s = document.getElementById('search');
+  if (__s) __s.value = '';
+  filterSongs();
 }
+
 function navigateSong(d) {
   if (!currentSong) return;
   const idx = currentModeList.findIndex(s => s.id === currentSong.id);
@@ -537,8 +562,11 @@ function openDnesEditor(silent=false) {
   if (!isAdmin && !silent) return;
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
   dnesSelectedIds = [...payload.ids];
-  document.getElementById('dnes-name').value = (payload.ids.length === 0 && (payload.title || DNES_DEFAULT_TITLE) === DNES_DEFAULT_TITLE) ? '' : (payload.title || DNES_DEFAULT_TITLE);
-  renderDnesSelected();
+  const __dn=document.getElementById('dnes-name');
+  if (__dn) __dn.oninput = () => { dnesDirty = true; };
+  __dn.value = (payload.ids.length === 0 && (payload.title || DNES_DEFAULT_TITLE) === DNES_DEFAULT_TITLE) ? '' : (payload.title || DNES_DEFAULT_TITLE);
+  dnesDirty = true;
+    renderDnesSelected();
   renderDnesAvailable();
 }
 function filterDnesSearch(){ renderDnesAvailable(); }
@@ -561,6 +589,7 @@ function renderDnesAvailable() {
 function addToDnesSelection(id) {
   if (!dnesSelectedIds.includes(id)) {
     dnesSelectedIds.push(id);
+    dnesDirty = true;
     renderDnesSelected();
     const __s = document.getElementById('dnes-search');
     if (__s && __s.value) { __s.value = ''; renderDnesAvailable(); }
@@ -593,9 +622,10 @@ function renderDnesSelected() {
       </div>`;
   }).join('');
 }
-function removeDnesAt(idx){ dnesSelectedIds.splice(idx,1); renderDnesSelected(); }
+function removeDnesAt(idx){ dnesSelectedIds.splice(idx,1); dnesDirty = true; renderDnesSelected(); }
 function clearDnesSelection(){
   dnesSelectedIds=[];
+  dnesDirty = true;
   const inp = document.getElementById('dnes-name');
   // keep section title as default, but editor input should be empty so admin doesn't need to delete it
   if (inp) inp.value = '';
@@ -614,6 +644,7 @@ async function saveDnesEditor() {
 
   try {
     await fetch(`${SCRIPT_URL}?action=save&name=PiesneNaDnes&pwd=${ADMIN_PWD}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
+    dnesDirty = false;
     showToast("Uložené ✅", true);
     setButtonStateById('dnes-save-btn', false);
   } catch(e) {
@@ -625,7 +656,8 @@ async function saveDnesEditor() {
 /* ===== PLAYLISTY (no flicker) ===== */
 let playlistsFetchInFlight = false;
 let playlistViewName = null; // when set, playlists section shows songs inside that playlist
-let editingPlaylistName = null; // original name when editing (for rename)
+let editingPlaylistName = null;
+  playlistDirty = false; // original name when editing (for rename)
 
 function getCachedPlaylistNames() {
   try { const idx = JSON.parse(localStorage.getItem(LS_PLAYLIST_INDEX) || "[]"); if (Array.isArray(idx)) return idx.map(String); } catch(e) {}
@@ -798,6 +830,7 @@ function newPlaylist(){
   if (nameEl) nameEl.value = '';
   selectedSongIds = [];
   editingPlaylistName = null;
+  playlistDirty = false;
   renderPlaylistAvailable();
   renderPlaylistSelection();
   updatePlaylistSaveEnabled();
@@ -805,6 +838,7 @@ function newPlaylist(){
 function openPlaylistEditorNew(silent=false){
   if (!isAdmin && !silent) return;
   editingPlaylistName = null;
+  playlistDirty = false;
   selectedSongIds = [];
   const nameEl = document.getElementById('playlist-name');
   if (nameEl) nameEl.value = '';
@@ -840,6 +874,7 @@ function renderPlaylistAvailable(){
 function addToPlaylistSelection(id){
   if (!selectedSongIds.includes(id)) {
     selectedSongIds.push(id);
+    playlistDirty = true;
     renderPlaylistSelection();
     const __ps = document.getElementById('playlist-search');
     if (__ps && __ps.value) { __ps.value = ''; renderPlaylistAvailable(); }
@@ -878,6 +913,7 @@ function renderPlaylistSelection(){
 
 function removeFromPlaylistSelection(idx){
   selectedSongIds.splice(idx,1);
+  playlistDirty = true;
   renderPlaylistSelection();
 }
 
@@ -886,6 +922,7 @@ function clearSelection(){
   const nameEl = document.getElementById('playlist-name');
   if (nameEl) nameEl.value = '';
   editingPlaylistName = null;
+  playlistDirty = false;
   renderPlaylistSelection();
 }
 
@@ -944,6 +981,7 @@ const newName = rawName;
 
   // reset editor to allow creating a new playlist immediately
   editingPlaylistName = null;
+  playlistDirty = false;
 
   // update UI immediately
   playlistViewName = null;
@@ -960,6 +998,7 @@ const newName = rawName;
       try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(oldName)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
       try { await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(oldName)}&pwd=${ADMIN_PWD}&content=`, { mode:'no-cors' }); } catch(e) {}
     }
+    playlistDirty = false;
     showToast('Uložené ✅', true);
     setButtonStateById('playlist-save-btn', false);
     updatePlaylistSaveEnabled();
@@ -1185,7 +1224,7 @@ document.addEventListener('DOMContentLoaded', () => {
   toggleSection('all', false);
 
   const __pn = document.getElementById('playlist-name');
-  if (__pn) __pn.addEventListener('input', updatePlaylistSaveEnabled);
+  if (__pn) __pn.addEventListener('input', () => { updatePlaylistSaveEnabled(); playlistDirty = true; });
   updatePlaylistSaveEnabled();
 
   parseXML();
