@@ -540,7 +540,9 @@ function buildOrderedSongText(song, orderStr){
     // 999: look for transpose line right after marker inside that block (we can't see it after split, so detect by scanning raw lines)
     if (is999 && !shownTransFor.has(key)){
       // try to find first trans line inside block content if present as first non-empty line
-      const lines = blocks[key] || [];
+      let lines = (blocks[key] || []).slice();
+      while (lines.length && lines[0].trim() === "") lines.shift();
+      while (lines.length && lines[lines.length-1].trim() === "") lines.pop();
       const firstNonEmpty = (lines.find(l => l.trim() !== "") || "").trim();
       if (/^[+-]\d+$/.test(firstNonEmpty)){
         out.push(`Transpozícia: ${firstNonEmpty}`);
@@ -549,7 +551,9 @@ function buildOrderedSongText(song, orderStr){
     }
 
     out.push(key);
-    const lines = blocks[key] || [];
+    let lines = (blocks[key] || []).slice();
+    while (lines.length && lines[0].trim() === "") lines.shift();
+    while (lines.length && lines[lines.length-1].trim() === "") lines.pop();
     // For 999, if first line is transpose, skip it from content (already shown)
     if (is999 && lines.length && /^[+-]\d+$/.test((lines[0]||"").trim())){
       out.push(...lines.slice(1));
@@ -576,8 +580,7 @@ function renderSong() {
   // Style special lines / markers (keep \n, rely on pre-wrap in CSS)
   // If the song starts with +1 / -2 line, show it as Transpozícia
   text = text.replace(/^([+-]\d+)\s*$/m, 'Transpozícia: $1');
-  text = text.replace(/^Transpozícia:\s*([+-]?\d+)\s*$/gm, 'Transpozícia: <span class="song-transpose">$1</span>');
-  text = text.replace(/^Transpozícia:\s*([+-]?\d+)\s*$/gm, '<span class="song-transpose-line">Transpozícia: $1</span>');
+  text = text.replace(/^Transpozícia:\s*([+-]?\d+)\s*$/gm, '<span class="song-transpose-line">Transpozícia: <span class="song-transpose">$1</span></span>');
   text = text.replace(/^(Predohra|Medzihra|Dohra)(:.*)?$/gmi, (m0) => `<span class="song-special">${m0}</span>`);
   text = text.replace(/^(\d+\.|R\d*:|B\d*:)\s*$/gm, '<span class="song-marker">$1</span>');
 
@@ -1135,7 +1138,7 @@ async function saveDnesToHistory(){
   renderHistoryUI(true);
 
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=__DELETED__${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
     showToast('Uložené do histórie ✅', true);
   } catch(e) {
     showToast('Nepodarilo sa uložiť do histórie ❌', false);
@@ -1151,7 +1154,7 @@ function deleteHistoryEntry(ts){
   const next = arr.filter(x => Number(x.ts) !== Number(ts));
   localStorage.setItem(LS_HISTORY, JSON.stringify(next));
   renderHistoryUI(true);
-  try { fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=__DELETED__${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
+  try { fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
   loadHistoryFromDrive();
 }
 
@@ -1561,7 +1564,6 @@ async function deletePlaylist(nameEnc){
 
   try {
     try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
-    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}&content=__DELETED__`, { mode:'no-cors' });
     await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
     showToast('Vymazané ✅', true);
   } catch(e) {
