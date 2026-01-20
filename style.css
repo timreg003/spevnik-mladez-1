@@ -316,3 +316,7 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 /* Sad icon in empty 'DNES' message */
 .sad-ico{ display:inline-flex; align-items:center; margin-left:6px; }
 .sad-ico i{ color:#00bfff; font-size:18px; }
+
+
+.btn-neutral{ background:#777; color:#111; }
+.btn-neutral:active{ transform: scale(0.99); }
