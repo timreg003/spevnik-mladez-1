@@ -421,7 +421,7 @@ function parseDnesPayload(raw) {
 }
 function setDnesTitle(title) {
   dnesTitle = (title || DNES_DEFAULT_TITLE);
-  const __dt=document.getElementById("dnes-title"); if(__dt) __dt.innerText = dnesTitle.toUpperCase();
+  document.getElementById('dnes-title').innerText = dnesTitle.toUpperCase();
 }
 function getDnesIds() {
   const raw = localStorage.getItem('piesne_dnes') || "";
@@ -437,7 +437,7 @@ function loadDnesCacheFirst(showEmptyAllowed) {
       box.innerHTML = '<div class="loading">Načítavam...</div>';
       return;
     }
-    box.innerHTML = '<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny :'‑(</div>';
+    box.innerHTML = '<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny :'-(</div>';
     return;
   }
 
@@ -494,7 +494,7 @@ function addToDnesSelection(id) {
 function renderDnesSelected() {
   const box = document.getElementById('dnes-selected-editor');
   if (!dnesSelectedIds.length) {
-    box.innerHTML = '<div class="dnes-empty">Zatiaľ prázdne.</div>';
+    box.innerHTML = `<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny :'-(</div>`;
     return;
   }
   box.innerHTML = dnesSelectedIds.map((id, idx) => {
@@ -741,7 +741,7 @@ function renderPlaylistSelection(){
   const box = document.getElementById('selected-list-editor');
   if (!box) return;
   if (!selectedSongIds.length) {
-    box.innerHTML = '<div class="dnes-empty">Zatiaľ prázdne.</div>';
+    box.innerHTML = `<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny :'-(</div>`;
     return;
   }
 
