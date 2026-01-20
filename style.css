@@ -473,3 +473,22 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 .history-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
 .history-title{ font-weight:900; color:#fff; flex:1; }
 .history-del{ background:#333; color:#fff; border:none; border-radius:10px; padding:6px 10px; cursor:pointer; }
+
+/* Form order markers & special lines in song detail */
+.song-marker{
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.15em;
+}
+.song-transpose{
+  display:inline-block;
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.2em;
+}
+.song-special{
+  display:inline-block;
+  color:#00bfff;
+  font-weight:900;
+  font-size:1.2em;
+}
