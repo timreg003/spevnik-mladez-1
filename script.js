@@ -43,10 +43,15 @@ let autoscrollInterval = null, currentLevel = 1;
 let isAdmin = false;
 
 let dnesSelectedIds = [];
-let dnesTitle = "PIESNE NA DNES";
+// Default title shown when the list is empty / freshly cleared
+const DNES_DEFAULT_TITLE = "PIESNE NA TENTO DEŇ";
+let dnesTitle = DNES_DEFAULT_TITLE;
 
 let selectedSongIds = [];
 let playlistOrder = [];
+
+// Persisted song font size (pinch zoom in song detail)
+const LS_SONG_FONT_SIZE = 'song_font_size';
 
 const LS_PLAYLIST_INDEX = "playlist_index";
 const LS_PLAYLIST_ORDER = "playlist_order";
@@ -125,6 +130,8 @@ function toggleSection(section, expand = null) {
 function goHomeUI() {
   stopAutoscroll();
   closeSong();
+  playlistViewName = null;
+  renderPlaylistsUI(true);
   document.getElementById('search').value = "";
   filterSongs();
 
@@ -307,6 +314,7 @@ function renderSong() {
   const el = document.getElementById('song-content');
   el.innerHTML = text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
   el.style.fontSize = fontSize + 'px';
+  updateFontSizeLabel();
 }
 
 function transposeChord(c, step) {
@@ -321,7 +329,7 @@ function transposeChord(c, step) {
 function transposeSong(d) { transposeStep += d; document.getElementById('transpose-val').innerText = (transposeStep>0?"+":"")+transposeStep; renderSong(); }
 function resetTranspose() { transposeStep = 0; document.getElementById('transpose-val').innerText = "0"; renderSong(); }
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
-function changeFontSize(d) { fontSize += d; renderSong(); }
+function changeFontSize(d) { applySongFontSize(fontSize + d); }
 
 /* ===== AUTOSCROLL ===== */
 function toggleAutoscroll() {
@@ -394,18 +402,18 @@ let dnesFetchInFlight = false;
 
 function parseDnesPayload(raw) {
   const trimmed = (raw || "").trim();
-  if (!trimmed) return { title: "PIESNE NA DNES", ids: [] };
+  if (!trimmed) return { title: DNES_DEFAULT_TITLE, ids: [] };
 
   try {
     const obj = JSON.parse(trimmed);
-    if (obj && Array.isArray(obj.ids)) return { title: (obj.title || "PIESNE NA DNES"), ids: obj.ids.map(String) };
+    if (obj && Array.isArray(obj.ids)) return { title: (obj.title || DNES_DEFAULT_TITLE), ids: obj.ids.map(String) };
   } catch(e) {}
 
   const ids = trimmed.split(',').map(x => x.trim()).filter(Boolean);
-  return { title: "PIESNE NA DNES", ids };
+  return { title: DNES_DEFAULT_TITLE, ids };
 }
 function setDnesTitle(title) {
-  dnesTitle = (title || "PIESNE NA DNES");
+  dnesTitle = (title || DNES_DEFAULT_TITLE);
   document.getElementById('dnes-title').innerText = dnesTitle.toUpperCase();
 }
 function getDnesIds() {
@@ -422,7 +430,7 @@ function loadDnesCacheFirst(showEmptyAllowed) {
       box.innerHTML = '<div class="loading">Načítavam...</div>';
       return;
     }
-    box.innerHTML = '<div class="dnes-empty">Žiadne piesne.</div>';
+    box.innerHTML = '<div class="dnes-empty">Zatiaľ prázdne (slúži na piesne pre konkrétny deň).</div>';
     return;
   }
 
@@ -450,7 +458,7 @@ function openDnesEditor(silent=false) {
   if (!isAdmin && !silent) return;
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
   dnesSelectedIds = [...payload.ids];
-  document.getElementById('dnes-name').value = payload.title || "PIESNE NA DNES";
+  document.getElementById('dnes-name').value = payload.title || DNES_DEFAULT_TITLE;
   renderDnesSelected();
   renderDnesAvailable();
 }
@@ -503,9 +511,15 @@ function renderDnesSelected() {
   }).join('');
 }
 function removeDnesAt(idx){ dnesSelectedIds.splice(idx,1); renderDnesSelected(); }
-function clearDnesSelection(){ dnesSelectedIds=[]; renderDnesSelected(); }
+function clearDnesSelection(){
+  dnesSelectedIds=[];
+  const inp = document.getElementById('dnes-name');
+  if (inp) inp.value = DNES_DEFAULT_TITLE;
+  setDnesTitle(DNES_DEFAULT_TITLE);
+  renderDnesSelected();
+}
 async function saveDnesEditor() {
-  const title = (document.getElementById('dnes-name').value || "PIESNE NA DNES").trim();
+  const title = (document.getElementById('dnes-name').value || DNES_DEFAULT_TITLE).trim();
   const payload = JSON.stringify({ title, ids: dnesSelectedIds });
 
   localStorage.setItem('piesne_dnes', payload);
@@ -522,6 +536,8 @@ async function saveDnesEditor() {
 
 /* ===== PLAYLISTY (no flicker) ===== */
 let playlistsFetchInFlight = false;
+let playlistViewName = null; // when set, playlists section shows songs inside that playlist
+let editingPlaylistName = null; // original name when editing (for rename)
 
 function getCachedPlaylistNames() {
   try { const idx = JSON.parse(localStorage.getItem(LS_PLAYLIST_INDEX) || "[]"); if (Array.isArray(idx)) return idx.map(String); } catch(e) {}
@@ -588,6 +604,12 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
   const sect = document.getElementById('playlists-section');
   if (!sect) return;
 
+  // If user opened a playlist, show its songs INSIDE the playlists folder
+  if (playlistViewName) {
+    renderPlaylistSongsView(playlistViewName);
+    return;
+  }
+
   const names = playlistOrder || [];
   if (!names.length) {
     if (!showEmptyAllowed && playlistsFetchInFlight) {
@@ -630,25 +652,240 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
 
 function openPlaylist(nameEnc) {
   const name = decodeURIComponent(nameEnc);
+  playlistViewName = name;
+  toggleSection('playlists', true);
+  renderPlaylistsUI(true);
+  window.scrollTo(0,0);
+}
+
+function closePlaylistView(){
+  playlistViewName = null;
+  renderPlaylistsUI(true);
+}
+
+function renderPlaylistSongsView(name){
+  const sect = document.getElementById('playlists-section');
+  if (!sect) return;
+
   const raw = (localStorage.getItem('playlist_' + name) || "").trim();
   const ids = raw ? raw.split(',').map(x => x.trim()).filter(Boolean) : [];
-
   currentModeList = ids.map(id => songs.find(x => x.id === id)).filter(Boolean);
   currentListSource = 'playlist';
 
-  toggleSection('all', true);
+  const headerBtns = `
+    <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #333; background:#121212;">
+      <button class="pl-back" onclick="closePlaylistView()"><i class=\"fas fa-arrow-left\"></i> Späť</button>
+      <div style="font-weight:800; color:#fff; text-align:center; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 8px;">${escapeHtml(name)}</div>
+      ${isAdmin ? `<button class=\"pl-edit\" onclick=\"editPlaylist('${encodeURIComponent(name)}')\"><i class=\"fas fa-pen\"></i></button>` : `<span style=\"width:44px;\"></span>`}
+    </div>`;
 
-  const box = document.getElementById('piesne-list');
   if (!currentModeList.length) {
-    box.innerHTML = `<div class="dnes-empty">Prázdny playlist.</div>`;
+    sect.innerHTML = headerBtns + `<div class="dnes-empty">Prázdny playlist.</div>`;
     return;
   }
 
-  box.innerHTML = currentModeList.map(s =>
+  sect.innerHTML = headerBtns + currentModeList.map(s =>
     songRowHTMLClickable(s.displayId, s.title, `openSongById('${s.id}','playlist')`)
   ).join('');
+}
 
-  window.scrollTo(0,0);
+/* ===== PLAYLIST EDITOR ===== */
+function openPlaylistEditorNew(silent=false){
+  if (!isAdmin && !silent) return;
+  editingPlaylistName = null;
+  selectedSongIds = [];
+  const nameEl = document.getElementById('playlist-name');
+  if (nameEl) nameEl.value = '';
+  const searchEl = document.getElementById('playlist-search');
+  if (searchEl) searchEl.value = '';
+  renderPlaylistAvailable();
+  renderPlaylistSelection();
+}
+
+function filterPlaylistSearch(){
+  renderPlaylistAvailable();
+}
+
+function renderPlaylistAvailable(){
+  const t = (document.getElementById('playlist-search')?.value || '').toLowerCase().trim();
+  const list = t ? songs.filter(s => s.title.toLowerCase().includes(t) || s.displayId.toLowerCase().includes(t)) : songs;
+  const target = document.getElementById('playlist-available-list');
+  if (!target) return;
+
+  target.innerHTML = list.map(s => `
+    <div class="draggable-item" onclick="addToPlaylistSelection('${s.id}')">
+      <div style="display:flex; gap:10px; align-items:center; flex:1;">
+        <div style="color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap;">${escapeHtml(s.displayId)}.</div>
+        <div style="flex:1; overflow-wrap:anywhere;">${escapeHtml(s.title)}</div>
+      </div>
+      <button class="small-plus" onclick="event.stopPropagation(); addToPlaylistSelection('${s.id}')">+</button>
+    </div>
+  `).join('');
+}
+
+function addToPlaylistSelection(id){
+  if (!selectedSongIds.includes(id)) {
+    selectedSongIds.push(id);
+    renderPlaylistSelection();
+  }
+}
+
+function renderPlaylistSelection(){
+  const box = document.getElementById('selected-list-editor');
+  if (!box) return;
+  if (!selectedSongIds.length) {
+    box.innerHTML = '<div class="dnes-empty">Zatiaľ prázdne.</div>';
+    return;
+  }
+
+  box.innerHTML = selectedSongIds.map((id, idx) => {
+    const s = songs.find(x => x.id === id);
+    const left = s ? `${s.displayId}.` : id;
+    const right = s ? s.title : '';
+    return `
+      <div class="draggable-item"
+           draggable="true"
+           data-idx="${idx}"
+           ondragstart="onDragStart(event,'plsel')"
+           ondragover="onDragOver(event)"
+           ondrop="onDrop(event,'plsel')">
+        <div style="display:flex; gap:10px; align-items:center; flex:1;">
+          <div style="color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap;">${escapeHtml(left)}</div>
+          <div style="flex:1; overflow-wrap:anywhere;">${escapeHtml(right)}</div>
+        </div>
+        <span class="drag-handle"><i class="fas fa-grip-lines"></i></span>
+        <button class="small-del" onclick="removeFromPlaylistSelection(${idx})">X</button>
+      </div>`;
+  }).join('');
+}
+
+function removeFromPlaylistSelection(idx){
+  selectedSongIds.splice(idx,1);
+  renderPlaylistSelection();
+}
+
+function clearSelection(){
+  selectedSongIds = [];
+  const nameEl = document.getElementById('playlist-name');
+  if (nameEl) nameEl.value = '';
+  editingPlaylistName = null;
+  renderPlaylistSelection();
+}
+
+async function savePlaylist(){
+  if (!isAdmin) return;
+  const nameEl = document.getElementById('playlist-name');
+  const rawName = (nameEl?.value || '').trim();
+  if (!rawName) {
+    showToast('Zadaj názov playlistu.', false);
+    return;
+  }
+
+  const newName = rawName;
+  const oldName = editingPlaylistName;
+
+  // handle rename / overwrite
+  if (oldName && newName !== oldName) {
+    if (playlistOrder.includes(newName) && !confirm('Playlist s týmto názvom už existuje. Prepísať?')) return;
+  } else if (!oldName && playlistOrder.includes(newName)) {
+    if (!confirm('Playlist s týmto názvom už existuje. Prepísať?')) return;
+  }
+
+  // update local storage index/order
+  let names = getCachedPlaylistNames();
+  playlistOrder = getCachedPlaylistOrder();
+  playlistOrder = applyOrder(names, playlistOrder);
+
+  if (oldName && newName !== oldName) {
+    // rename in index
+    names = names.filter(n => n !== oldName);
+    if (!names.includes(newName)) names.push(newName);
+    // rename in order
+    playlistOrder = playlistOrder.map(n => (n === oldName ? newName : n));
+    // move cached content key
+    const oldKey = 'playlist_' + oldName;
+    const newKey = 'playlist_' + newName;
+    const oldContent = localStorage.getItem(oldKey);
+    if (oldContent != null) localStorage.setItem(newKey, oldContent);
+    localStorage.removeItem(oldKey);
+  } else {
+    if (!names.includes(newName)) names.push(newName);
+    if (!playlistOrder.includes(newName)) playlistOrder.push(newName);
+  }
+
+  const payload = selectedSongIds.join(',');
+  localStorage.setItem('playlist_' + newName, payload);
+  localStorage.setItem(LS_PLAYLIST_INDEX, JSON.stringify(names));
+  localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
+
+  editingPlaylistName = newName;
+
+  // update UI immediately
+  playlistViewName = null;
+  renderPlaylistsUI(true);
+
+  // persist to Drive
+  try {
+    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(newName)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
+    // best-effort delete old name on backend if renamed
+    if (oldName && newName !== oldName) {
+      try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(oldName)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
+      try { await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(oldName)}&pwd=${ADMIN_PWD}&content=`, { mode:'no-cors' }); } catch(e) {}
+    }
+    showToast('Uložené ✅', true);
+  } catch(e) {
+    showToast('Nepodarilo sa uložiť ❌', false);
+  }
+}
+
+function editPlaylist(nameEnc){
+  if (!isAdmin) return;
+  const name = decodeURIComponent(nameEnc);
+  editingPlaylistName = name;
+  const nameEl = document.getElementById('playlist-name');
+  if (nameEl) nameEl.value = name;
+
+  const raw = (localStorage.getItem('playlist_' + name) || '').trim();
+  selectedSongIds = raw ? raw.split(',').map(x => x.trim()).filter(Boolean) : [];
+
+  // show editor (already visible for admin), and reset search
+  const searchEl = document.getElementById('playlist-search');
+  if (searchEl) searchEl.value = '';
+  renderPlaylistAvailable();
+  renderPlaylistSelection();
+
+  // if we were inside playlist view, jump out so user sees editor
+  playlistViewName = null;
+  renderPlaylistsUI(true);
+  toggleSection('playlists', true);
+}
+
+async function deletePlaylist(nameEnc){
+  if (!isAdmin) return;
+  const name = decodeURIComponent(nameEnc);
+  if (!confirm(`Vymazať playlist "${name}"?`)) return;
+
+  localStorage.removeItem('playlist_' + name);
+
+  let names = getCachedPlaylistNames().filter(n => n !== name);
+  playlistOrder = applyOrder(names, getCachedPlaylistOrder().filter(n => n !== name));
+  localStorage.setItem(LS_PLAYLIST_INDEX, JSON.stringify(names));
+  localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
+
+  if (editingPlaylistName === name) openPlaylistEditorNew(true);
+  if (playlistViewName === name) playlistViewName = null;
+
+  renderPlaylistsUI(true);
+
+  try {
+    try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
+    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}&content=`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
+    showToast('Vymazané ✅', true);
+  } catch(e) {
+    showToast('Nepodarilo sa vymazať ❌', false);
+  }
 }
 
 /* Drag & Drop basics */
@@ -664,8 +901,23 @@ function onDrop(ev, ctx) {
   const to = parseInt(ev.currentTarget.getAttribute("data-idx"), 10);
   if (isNaN(from) || isNaN(to) || from === to) return;
 
-  if (ctx === 'dnes') { moveInArray(dnesSelectedIds, from, to); renderDnesSelected(); }
-  else if (ctx === 'plist') { moveInArray(playlistOrder, from, to); localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder)); renderPlaylistsUI(true); }
+  if (ctx === 'dnes') {
+    moveInArray(dnesSelectedIds, from, to);
+    renderDnesSelected();
+  }
+  else if (ctx === 'plist') {
+    moveInArray(playlistOrder, from, to);
+    localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
+    renderPlaylistsUI(true);
+    // best-effort persist order
+    if (isAdmin) {
+      try { fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' }); } catch(e) {}
+    }
+  }
+  else if (ctx === 'plsel') {
+    moveInArray(selectedSongIds, from, to);
+    renderPlaylistSelection();
+  }
 }
 function moveInArray(arr, from, to){ const item = arr.splice(from,1)[0]; arr.splice(to,0,item); }
 
@@ -726,7 +978,68 @@ function escapeHtml(s) {
   }[m]));
 }
 
+
+/* ===== FONT SIZE UI (DETAIL) ===== */
+function updateFontSizeLabel(){
+  const el = document.getElementById('font-size-label');
+  if (el) el.innerText = String(fontSize);
+}
+
+/* ===== PINCH TO CHANGE SONG TEXT SIZE (DETAIL) ===== */
+function applySongFontSize(px){
+  const v = Math.max(12, Math.min(34, Math.round(px)));
+  fontSize = v;
+  updateFontSizeLabel();
+  try { localStorage.setItem(LS_SONG_FONT_SIZE, String(v)); } catch(e) {}
+  renderSong();
+}
+
+function initSongPinchToZoom(){
+  // Custom pinch so it works even with viewport user-scalable=no
+  const area = document.getElementById('song-detail');
+  if (!area) return;
+
+  let active = false;
+  let startDist = 0;
+  let startSize = fontSize;
+
+  function dist(t1, t2){
+    const dx = t2.clientX - t1.clientX;
+    const dy = t2.clientY - t1.clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  area.addEventListener('touchstart', (e) => {
+    // only when song detail is visible
+    if (area.style.display === 'none') return;
+    if (!e.touches || e.touches.length !== 2) return;
+    active = true;
+    startDist = dist(e.touches[0], e.touches[1]);
+    startSize = fontSize;
+  }, { passive: true });
+
+  area.addEventListener('touchmove', (e) => {
+    if (!active || !e.touches || e.touches.length !== 2) return;
+    const d = dist(e.touches[0], e.touches[1]);
+    if (!startDist) return;
+    const scale = d / startDist;
+    const next = startSize * scale;
+    applySongFontSize(next);
+    // prevent accidental browser zoom
+    e.preventDefault();
+  }, { passive: false });
+
+  area.addEventListener('touchend', () => { active = false; startDist = 0; }, { passive: true });
+  area.addEventListener('touchcancel', () => { active = false; startDist = 0; }, { passive: true });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // restore song font size (detail)
+  const savedSong = parseInt(localStorage.getItem(LS_SONG_FONT_SIZE) || String(fontSize), 10);
+  if (!isNaN(savedSong)) fontSize = Math.max(12, Math.min(34, savedSong));
+  updateFontSizeLabel();
+  initSongPinchToZoom();
+
   toggleSection('dnes', false);
   toggleSection('playlists', false);
   toggleSection('all', false);
