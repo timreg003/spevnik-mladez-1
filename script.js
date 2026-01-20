@@ -44,7 +44,7 @@ let isAdmin = false;
 
 let dnesSelectedIds = [];
 // Default title shown when the list is empty / freshly cleared
-const DNES_DEFAULT_TITLE = "PIESNE NA TENTO DEŇ";
+const DNES_DEFAULT_TITLE = "PIESNE NA DNES";
 let dnesTitle = DNES_DEFAULT_TITLE;
 
 let selectedSongIds = [];
@@ -314,7 +314,6 @@ function renderSong() {
   const el = document.getElementById('song-content');
   el.innerHTML = text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
   el.style.fontSize = fontSize + 'px';
-  updateFontSizeLabel();
 }
 
 function transposeChord(c, step) {
@@ -430,7 +429,7 @@ function loadDnesCacheFirst(showEmptyAllowed) {
       box.innerHTML = '<div class="loading">Načítavam...</div>';
       return;
     }
-    box.innerHTML = '<div class="dnes-empty">Zatiaľ prázdne (slúži na piesne pre konkrétny deň).</div>';
+    box.innerHTML = '<div class="dnes-empty">Zoznam piesní na konkrétny deň je momentálne prázdny.</div>';
     return;
   }
 
@@ -978,18 +977,10 @@ function escapeHtml(s) {
   }[m]));
 }
 
-
-/* ===== FONT SIZE UI (DETAIL) ===== */
-function updateFontSizeLabel(){
-  const el = document.getElementById('font-size-label');
-  if (el) el.innerText = String(fontSize);
-}
-
 /* ===== PINCH TO CHANGE SONG TEXT SIZE (DETAIL) ===== */
 function applySongFontSize(px){
   const v = Math.max(12, Math.min(34, Math.round(px)));
   fontSize = v;
-  updateFontSizeLabel();
   try { localStorage.setItem(LS_SONG_FONT_SIZE, String(v)); } catch(e) {}
   renderSong();
 }
@@ -1037,7 +1028,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // restore song font size (detail)
   const savedSong = parseInt(localStorage.getItem(LS_SONG_FONT_SIZE) || String(fontSize), 10);
   if (!isNaN(savedSong)) fontSize = Math.max(12, Math.min(34, savedSong));
-  updateFontSizeLabel();
   initSongPinchToZoom();
 
   toggleSection('dnes', false);
