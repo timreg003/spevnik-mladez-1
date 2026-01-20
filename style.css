@@ -239,14 +239,16 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   background:#1a1a1a;
   padding:25px 15px;
   border-radius:12px;
-  line-height:2.2;
+  /* menšie medzery medzi riadkami (pôvodne bolo príliš veľké) */
+  line-height:1.8;
   white-space:pre-wrap;
   margin-top:10px;
   font-size:17px;
-  text-align:left;
+  /* text nech ostane vizuálne "na stred", značky (1., R:, B:, ...) sú vľavo cez .song-marker */
+  text-align:center;
   color:#fff;
 }
-.chord{ color:#00bfff; font-weight:bold; background:#252525; padding:1px 4px; border-radius:4px; }
+.chord{ color:#00bfff; font-weight:bold; background:#252525; padding:1px 4px; border-radius:4px; position:relative; top:-0.12em; }
 .tiny-label{ font-size:10px; color:#00bfff; margin-top:4px; font-weight:bold; }
 
 #error-report-container{
