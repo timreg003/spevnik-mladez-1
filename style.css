@@ -1,4 +1,4 @@
-/* ✅ vypni pull-to-refresh tam, kde to prehliadač podporuje */
+/* ✅ vypni pull-to-refresh tam, kde to browser podporuje */
 html, body { overscroll-behavior-y: none; }
 
 /* Drag: nič neoznačuje text (inputs môžu) */
@@ -214,14 +214,6 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 .chord{ color:#00bfff; font-weight:bold; background:#252525; padding:1px 4px; border-radius:4px; }
 .tiny-label{ font-size:10px; color:#00bfff; margin-top:4px; font-weight:bold; }
 
-.update-box{ text-align:center; margin:20px 0; }
-.btn-update{
-  background:#00bfff; color:black; font-weight:900;
-  padding:12px 24px; border-radius:12px;
-  border:none; cursor:pointer;
-}
-.btn-update:disabled{ opacity:0.45; cursor:not-allowed; }
-
 #error-report-container{
   margin:40px 0 60px 0; padding:20px;
   background:#1a1a1a; border-radius:12px; border:1px solid #333;
@@ -239,3 +231,48 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   border-radius:8px; padding:12px; border:none; cursor:pointer;
 }
 #form-status{ text-align:center; margin-top:10px; font-size:14px; color:#00ff00; }
+
+/* ✅ Floating gear button LEFT */
+#fab-update{
+  position: fixed;
+  left: 16px;
+  bottom: 18px;
+  z-index: 100000;
+}
+#fab-btn{
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  border: 1px solid #333;
+  background: #1e1e1e;
+  color: #00bfff;
+  font-size: 20px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.55);
+}
+#fab-btn:active{ transform: scale(0.98); }
+
+.fab-menu{
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: 64px; /* opens upward */
+  min-width: 210px;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.65);
+  overflow: hidden;
+}
+.fab-menu button{
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: none;
+  color: #fff;
+  border: none;
+  font-weight: 800;
+}
+.fab-menu button:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
