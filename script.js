@@ -166,7 +166,13 @@ function logoutAdmin() {
   document.getElementById('dnes-editor-panel').style.display = 'none';
   document.getElementById('admin-panel').style.display = 'none';
   selectedSongIds = [];
-  renderPlaylistsUI(true);
+  
+  // Clear DNES editor input (keep saved title/display)
+  const __dn = document.getElementById('dnes-name');
+  if (__dn) __dn.value = '';
+  const __ds = document.getElementById('dnes-search');
+  if (__ds) __ds.value = '';
+renderPlaylistsUI(true);
 }
 
 /* ===== XML LOAD ===== */
@@ -461,7 +467,7 @@ function openDnesEditor(silent=false) {
   if (!isAdmin && !silent) return;
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
   dnesSelectedIds = [...payload.ids];
-  document.getElementById('dnes-name').value = payload.title || DNES_DEFAULT_TITLE;
+  document.getElementById('dnes-name').value = (payload.ids.length === 0 && (payload.title || DNES_DEFAULT_TITLE) === DNES_DEFAULT_TITLE) ? '' : (payload.title || DNES_DEFAULT_TITLE);
   renderDnesSelected();
   renderDnesAvailable();
 }
@@ -631,7 +637,7 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
       sect.innerHTML = '<div class="loading">Načítavam...</div>';
       return;
     }
-    sect.innerHTML = '<div class="dnes-empty">Žiadne playlisty.</div>';
+    sect.innerHTML = '<div class="dnes-empty">Žiadne playlisty. <span class="sad-ico"><i class="fa-solid fa-face-sad-tear"></i></span></div>';
     return;
   }
 
