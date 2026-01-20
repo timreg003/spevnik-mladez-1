@@ -421,7 +421,7 @@ function parseDnesPayload(raw) {
 }
 function setDnesTitle(title) {
   dnesTitle = (title || DNES_DEFAULT_TITLE);
-  document.getElementById('dnes-title').innerText = dnesTitle.toUpperCase();
+  const __dt=document.getElementById("dnes-title"); if(__dt) __dt.innerText = dnesTitle.toUpperCase();
 }
 function getDnesIds() {
   const raw = localStorage.getItem('piesne_dnes') || "";
