@@ -69,6 +69,7 @@
         <div id="dnes-available-list" class="editor-list"></div>
 <div class="btn-row-2">
           <button id="dnes-save-btn" class="btn-save" onclick="saveDnesEditor()">ULOŽIŤ</button>
+          <button class="btn-neutral" onclick="saveDnesToHistory()">ULOŽIŤ DO HISTÓRIE</button>
           <button class="btn-delete" onclick="clearDnesSelection()">VYMAZAŤ</button>
         </div>
         </div>
@@ -82,6 +83,15 @@
     </div>
     <div id="playlists-section-wrapper" class="section-content" style="display:none;">
       <div id="playlists-section" class="list-box"><div class="loading">Načítavam...</div></div>
+      <!-- HISTÓRIA -->
+      <div class="section-header" onclick="toggleSection('history')">
+        <div class="section-title">HISTÓRIA</div>
+        <i id="history-chevron" class="fas fa-chevron-down section-chevron"></i>
+      </div>
+      <div id="history-section-wrapper" style="display:none;">
+        <div id="history-section" class="list-box"></div>
+      </div>
+
 
       <div id="admin-panel" class="editor-panel" style="display:none;">
         <div class="editor-toggle" onclick="toggleEditor('admin-panel')">
