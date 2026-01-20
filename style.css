@@ -360,62 +360,6 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 .controls{ gap:10px; }
 .control-group small{ opacity:0.9; }
 
-/* History */
-.history-card{
-  border: 1px solid #2b2b2b;
-  border-radius: 12px;
-  padding: 10px 10px;
-  margin: 10px 0;
-  background:#121212;
-}
-.history-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:8px;
-}
-.history-title{
-  font-weight:900;
-  color:#fff;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.history-meta{
-  opacity:0.8;
-  font-size: 13px;
-}
-.history-del{
-  background:#333;
-  color:#fff;
-  border:none;
-  border-radius:10px;
-  padding:6px 10px;
-  cursor:pointer;
-}
-.history-del:active{ transform: scale(0.99); }
-
-/* Transpose hint banner */
-.transpose-hint{
-  margin: 10px 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(0,191,255,0.12);
-  color:#00bfff;
-  font-weight: 900;
-  font-size: 18px;
-}
-/* Form notes (Predohra/Medzihra/Dohra) */
-.form-note{
-  margin: 10px 0 6px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(0,191,255,0.10);
-  color:#00bfff;
-  font-weight: 900;
-}
-
 /* Modal (Form editor) */
 .modal-overlay{
   position:fixed;
@@ -476,19 +420,10 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   overflow:auto;
   max-height:calc(92vh - 56px);
 }
-.modal-block{
-  margin-bottom:16px;
-}
-.modal-label{
-  font-weight:900;
-  color:#fff;
-  margin-bottom:8px;
-}
-.modal-hint{
-  margin-top:8px;
-  opacity:0.75;
-  font-size:12px;
-}
+.modal-block{ margin-bottom:16px; }
+.modal-label{ font-weight:900; color:#fff; margin-bottom:8px; }
+.modal-hint{ margin-top:8px; opacity:0.75; font-size:12px; }
+
 .form-preview{
   border:1px solid #222;
   border-radius:12px;
@@ -499,15 +434,9 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   max-height:220px;
   overflow:auto;
 }
-.form-preview .mk{
-  color:#00bfff;
-  font-weight:900;
-}
-.form-order{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
+.form-preview .mk{ color:#00bfff; font-weight:900; }
+
+.form-order{ display:flex; flex-wrap:wrap; gap:8px; }
 .chip{
   background:#222;
   color:#fff;
@@ -521,11 +450,7 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   background:rgba(0,191,255,0.15);
   color:#00bfff;
 }
-.form-buttons{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
+.form-buttons{ display:flex; flex-wrap:wrap; gap:8px; }
 .chip-btn{
   background:#222;
   border:none;
@@ -543,3 +468,8 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+.history-card{ border:1px solid #2b2b2b; border-radius:12px; padding:10px; margin:10px 0; background:#121212; }
+.history-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.history-title{ font-weight:900; color:#fff; flex:1; }
+.history-del{ background:#333; color:#fff; border:none; border-radius:10px; padding:6px 10px; cursor:pointer; }
