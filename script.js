@@ -132,8 +132,6 @@ function goHomeUI() {
   closeSong();
   playlistViewName = null;
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
   document.getElementById('search').value = "";
   filterSongs();
 
@@ -158,8 +156,6 @@ function toggleAdminAuth() {
     openDnesEditor(true);
     openPlaylistEditorNew(true);
     renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
   } else {
     logoutAdmin();
   }
@@ -527,7 +523,8 @@ function removeDnesAt(idx){ dnesSelectedIds.splice(idx,1); renderDnesSelected();
 function clearDnesSelection(){
   dnesSelectedIds=[];
   const inp = document.getElementById('dnes-name');
-  if (inp) inp.value = DNES_DEFAULT_TITLE;
+  // keep section title as default, but editor input should be empty so admin doesn't need to delete it
+  if (inp) inp.value = '';
   setDnesTitle(DNES_DEFAULT_TITLE);
   renderDnesSelected();
 }
@@ -618,8 +615,6 @@ async function loadPlaylistsFromDrive() {
 
   playlistsFetchInFlight = false;
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
 }
 
 
@@ -682,16 +677,12 @@ function openPlaylist(nameEnc) {
   playlistViewName = name;
   toggleSection('playlists', true);
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
   window.scrollTo(0,0);
 }
 
 function closePlaylistView(){
   playlistViewName = null;
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
 }
 
 function renderPlaylistSongsView(name){
@@ -866,10 +857,10 @@ async function savePlaylist(){
   // update UI immediately
   playlistViewName = null;
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
 
-  // persist to Drive
+    // clear editor fields after save so it doesn't overwrite the same playlist
+  newPlaylist();
+// persist to Drive
   try {
     await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(newName)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
     await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
@@ -903,8 +894,6 @@ function editPlaylist(nameEnc){
   // if we were inside playlist view, jump out so user sees editor
   playlistViewName = null;
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
   toggleSection('playlists', true);
 }
 
@@ -924,8 +913,6 @@ async function deletePlaylist(nameEnc){
   if (playlistViewName === name) playlistViewName = null;
 
   renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
 
   try {
     try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${ADMIN_PWD}`, { mode:'no-cors' }); } catch(e) {}
@@ -958,8 +945,6 @@ function onDrop(ev, ctx) {
     moveInArray(playlistOrder, from, to);
     localStorage.setItem(LS_PLAYLIST_ORDER, JSON.stringify(playlistOrder));
     renderPlaylistsUI(true);
-  // clear editor fields after save so it doesn't overwrite the same playlist
-  newPlaylist();
     // best-effort persist order
     if (isAdmin) {
       try { fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' }); } catch(e) {}
