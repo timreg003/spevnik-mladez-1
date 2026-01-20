@@ -447,6 +447,16 @@ function renderPlaylistSongsView(name){
   ).join('');
 }
 
+
+function updatePlaylistSaveEnabled(){
+  const btn = document.getElementById('playlist-save-btn') || document.getElementById('playlist-save');
+  const nameEl = document.getElementById('playlist-name');
+  if (!btn || !nameEl) return;
+  const hasName = (nameEl.value || '').trim().length > 0;
+  btn.disabled = !hasName;
+  btn.classList.toggle('disabled', !hasName);
+}
+
 /* ===== PLAYLIST EDITOR ===== */
 
 function newPlaylist(){
@@ -857,6 +867,11 @@ function toggleSection(section, expand = null){
 function togglesection(section, expand = null){ return toggleSection(section, expand); }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // enable/disable playlist save based on name
+  const __plName = document.getElementById('playlist-name');
+  if (__plName) __plName.addEventListener('input', updatePlaylistSaveEnabled);
+  updatePlaylistSaveEnabled();
+
   // restore song font size (detail)
   const savedSong = parseInt(localStorage.getItem(LS_SONG_FONT_SIZE) || String(fontSize), 10);
   if (!isNaN(savedSong)) fontSize = Math.max(12, Math.min(34, savedSong));
