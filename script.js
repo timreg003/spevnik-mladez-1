@@ -844,6 +844,18 @@ function initSongPinchToZoom(){
   area.addEventListener('touchcancel', () => { active = false; startDist = 0; }, { passive: true });
 }
 
+
+
+function toggleSection(section, expand = null){
+  const content = document.getElementById(section + '-section-wrapper');
+  const chevron = document.getElementById(section + '-chevron');
+  if (!content) return;
+  const show = expand !== null ? expand : (content.style.display === 'none');
+  content.style.display = show ? 'block' : 'none';
+  if (chevron) chevron.className = show ? 'fas fa-chevron-up section-chevron' : 'fas fa-chevron-down section-chevron';
+}
+function togglesection(section, expand = null){ return toggleSection(section, expand); }
+
 document.addEventListener('DOMContentLoaded', () => {
   // restore song font size (detail)
   const savedSong = parseInt(localStorage.getItem(LS_SONG_FONT_SIZE) || String(fontSize), 10);
