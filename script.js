@@ -34,6 +34,8 @@ const FORMSPREE_URL = "https://formspree.io/f/mvzzkwlw";
 let songs = [], filteredSongs = [];
 let currentSong = null;
 let currentModeList = [];
+let currentSongOrder = '';
+let currentHistoryTs = null;
 let currentListSource = 'all';
 
 let transposeStep = 0, fontSize = 17, chordsVisible = true;
@@ -43,6 +45,9 @@ let autoscrollInterval = null, currentLevel = 1;
 let isAdmin = false;
 
 let dnesSelectedIds = [];
+let dnesItems = []; // [{id, order}]
+let dnesOrderMap = {}; // id -> order string
+let historyOrderMap = {}; // ts|id -> order
 let dnesDirty = false;
 let playlistDirty = false;
 // Default title shown when the list is empty / freshly cleared
@@ -368,13 +373,146 @@ function filterSongs() {
   }
 }
 
+
+function isSong999(song){
+  const raw = (song?.originalId || "").toString().trim();
+  const num = raw.replace(/^0+/, '');
+  return num === '999';
+}
+
+// Parse into blocks keyed by markers: "1.", "R:", "R2:", "B:"...
+// Standard songs: first non-empty line "+N/-N" becomes globalTranspose.
+// 999 songs: "+N/-N" may appear as first non-empty line INSIDE a block.
+function parseSongBlocks(song){
+  const lines = (song.origText || "").split(/\r?\n/);
+
+  // global transpose hint for standard songs
+  let globalTranspose = null;
+  let i=0;
+  while (i < lines.length && lines[i].trim()==="") i++;
+  if (i < lines.length && /^[+-]\d+$/.test(lines[i].trim())){
+    globalTranspose = lines[i].trim();
+    lines.splice(i,1);
+  }
+
+  const markerRe = /^(\d+\.|R\d*:\s*|B\d*:\s*)\s*$/;
+  const blocks = {};
+  let currentKey = "__TOP__";
+  blocks[currentKey] = { keyLine:"", transposeHint:null, lines:[] };
+
+  function normKey(k){ return k.replace(/\s+/g,''); }
+
+  for (const ln of lines){
+    const t = ln.trim();
+    if (markerRe.test(t)){
+      currentKey = normKey(t);
+      if (!blocks[currentKey]) blocks[currentKey] = { keyLine: normKey(t), transposeHint:null, lines:[] };
+      continue;
+    }
+    if (!blocks[currentKey]) blocks[currentKey] = { keyLine: currentKey==="__TOP__"?"":currentKey, transposeHint:null, lines:[] };
+    blocks[currentKey].lines.push(ln);
+  }
+
+  if (isSong999(song)){
+    // move transpose hints from inside blocks
+    Object.keys(blocks).forEach(k => {
+      if (k === "__TOP__") return;
+      const bl = blocks[k];
+      let j=0;
+      while (j < bl.lines.length && bl.lines[j].trim()==="") j++;
+      if (j < bl.lines.length && /^[+-]\d+$/.test(bl.lines[j].trim())){
+        bl.transposeHint = bl.lines[j].trim();
+        bl.lines.splice(j,1);
+      }
+    });
+    // ignore global transpose for 999 songs by spec
+    globalTranspose = null;
+  }
+
+  return { blocks, globalTranspose };
+}
+
+function parseOrderString(orderStr){
+  const s = (orderStr || "").trim();
+  if (!s) return [];
+  const out = [];
+  let cur = "";
+  let depth = 0;
+  for (const ch of s){
+    if (ch === '(') depth++;
+    if (ch === ')') depth = Math.max(0, depth-1);
+    if (ch === ',' && depth === 0){
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+function renderFormNote(label, note){
+  const text = note ? `${label}: ${note}` : label;
+  return `<div class="form-note">${escapeHtml(text)}</div>`;
+}
+
+function buildSongHtmlByOrder(song, orderStr){
+  const { blocks, globalTranspose } = parseSongBlocks(song);
+  const steps = parseOrderString(orderStr);
+  const seen = new Set();
+  let html = "";
+
+  if (globalTranspose){
+    html += `<div class="transpose-hint">Transpozícia: ${escapeHtml(globalTranspose)}</div>`;
+  }
+
+  // helper: convert chords markup later by caller
+  function addText(t){ html += t; }
+
+  for (const raw of steps){
+    const noteMatch = /^(PREDOHRA|MEDZIHRA|DOHRA)(?:\((.*)\))?$/i.exec(raw);
+    if (noteMatch){
+      const lbl = noteMatch[1].toUpperCase();
+      const pretty = (lbl === "PREDOHRA") ? "Predohra" : (lbl === "MEDZIHRA") ? "Medzihra" : "Dohra";
+      addText(renderFormNote(pretty, (noteMatch[2]||"").trim()));
+      addText("\n");
+      continue;
+    }
+
+    const key = raw.replace(/\s+/g,'');
+    const bl = blocks[key];
+    if (!bl){
+      // unknown token -> show as note
+      addText(renderFormNote(raw, ""));
+      addText("\n");
+      continue;
+    }
+
+    if (isSong999(song) && bl.transposeHint && !seen.has(key)){
+      addText(`<div class="transpose-hint">Transpozícia: ${escapeHtml(bl.transposeHint)}</div>`);
+      seen.add(key);
+    }
+
+    if (bl.keyLine){
+      addText(`${escapeHtml(bl.keyLine)}\n`);
+    }
+    addText(bl.lines.join("\n"));
+    addText("\n\n");
+  }
+
+  return html;
+}
+
 /* ===== SONG DETAIL ===== */
 function openSongById(id, source) {
   currentListSource = source;
+  if (source !== 'dnes') currentSongOrder = '';
   const s = songs.find(x => x.id === id);
   if (!s) return;
 
   if (source === 'dnes') {
+    currentSongOrder = (dnesOrderMap[id] || '').trim();
     currentModeList = getDnesIds().map(i => songs.find(x => x.id === i)).filter(Boolean);
   } else if (source === 'playlist') {
     // already set
@@ -432,9 +570,28 @@ function renderSong() {
   }
 
   const el = document.getElementById('song-content');
-  el.innerHTML = text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
+
+  if (currentListSource === 'dnes' && (currentSongOrder || '').trim()){
+    const tmp = { ...currentSong, origText: text };
+    let html = buildSongHtmlByOrder(tmp, currentSongOrder);
+    html = html.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
+    el.innerHTML = html;
+  } else {
+    // show standard global transpose banner if first line is +N/-N
+    const tmp = { ...currentSong, origText: text };
+    const parsed = parseSongBlocks(tmp);
+    let extra = '';
+    if (parsed.globalTranspose){
+      extra = `<div class="transpose-hint">Transpozícia: ${escapeHtml(parsed.globalTranspose)}</div>`;
+      const lines = (text||'').split(/\r?\n/);
+      let i=0; while (i < lines.length && lines[i].trim()==='') i++;
+      if (i < lines.length && /^[+-]\d+$/.test(lines[i].trim())) lines.splice(i,1);
+      text = lines.join('\n');
+    }
+    el.innerHTML = extra + text.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
+  }
+
   el.style.fontSize = fontSize + 'px';
-  updateFontSizeLabel();
 }
 
 function transposeChord(c, step) {
@@ -522,33 +679,49 @@ let dnesFetchInFlight = false;
 
 function parseDnesPayload(raw) {
   const trimmed = (raw || "").trim();
-  if (!trimmed) return { title: DNES_DEFAULT_TITLE, ids: [] };
+  if (!trimmed) return { title: DNES_DEFAULT_TITLE, items: [] };
 
   try {
     const obj = JSON.parse(trimmed);
+
+    // New format: {title, items:[{songId, order}]}
+    if (obj && Array.isArray(obj.items)) {
+      const items = obj.items.map(it => ({
+        id: String(it.songId || it.id || ""),
+        order: (it.order || "").toString().trim()
+      })).filter(it => it.id);
+      return { title: (obj.title || DNES_DEFAULT_TITLE), items };
+    }
+
+    // Old format: {title, ids:[...]}
     if (obj && Array.isArray(obj.ids)) {
-      if (obj.ids.length === 0) return { title: DNES_DEFAULT_TITLE, ids: [] };
-      return { title: obj.title || DNES_DEFAULT_TITLE, ids: obj.ids.map(String) };
+      const items = obj.ids.map(String).map(id => ({ id, order:"" }));
+      return { title: (obj.title || DNES_DEFAULT_TITLE), items };
     }
   } catch(e) {}
 
+  // Very old CSV format: "id,id,id"
   const ids = trimmed.split(',').map(x => x.trim()).filter(Boolean);
-  return { title: DNES_DEFAULT_TITLE, ids };
+  const items = ids.map(id => ({ id, order:"" }));
+  return { title: DNES_DEFAULT_TITLE, items };
 }
 function setDnesTitle(title) {
   dnesTitle = (title || DNES_DEFAULT_TITLE);
   document.getElementById('dnes-title').innerText = dnesTitle.toUpperCase();
 }
 function getDnesIds() {
-  const raw = localStorage.getItem('piesne_dnes') || "";
-  return parseDnesPayload(raw).ids;
+  const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
+  return payload.items.map(it => it.id);
 }
 function loadDnesCacheFirst(showEmptyAllowed) {
   const box = document.getElementById('dnes-section');
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
   setDnesTitle(payload.title);
 
-  if (!payload.ids.length) {
+  dnesOrderMap = {};
+  payload.items.forEach(it => { dnesOrderMap[it.id] = (it.order || '').trim(); });
+
+  if (!payload.items.length) {
     if (!showEmptyAllowed && dnesFetchInFlight) {
       box.innerHTML = '<div class="loading">Načítavam...</div>';
       return;
@@ -557,13 +730,12 @@ function loadDnesCacheFirst(showEmptyAllowed) {
     return;
   }
 
-  box.innerHTML = payload.ids.map(id => {
-    const s = songs.find(x => x.id === id);
+  box.innerHTML = payload.items.map(it => {
+    const s = songs.find(x => x.id === it.id);
     if (!s) return '';
     return songRowHTMLClickable(s.displayId, s.title, `openSongById('${s.id}','dnes')`);
   }).join('');
-}
-async function loadDnesFromDrive() {
+}async function loadDnesFromDrive() {
   dnesFetchInFlight = true;
   loadDnesCacheFirst(false);
   try {
@@ -580,12 +752,11 @@ async function loadDnesFromDrive() {
 function openDnesEditor(silent=false) {
   if (!isAdmin && !silent) return;
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
-  dnesSelectedIds = [...payload.ids];
-  const __dn=document.getElementById('dnes-name');
-  if (__dn) __dn.oninput = () => { dnesDirty = true; };
-  __dn.value = (payload.ids.length === 0 && (payload.title || DNES_DEFAULT_TITLE) === DNES_DEFAULT_TITLE) ? '' : (payload.title || DNES_DEFAULT_TITLE);
-  dnesDirty = true;
-    renderDnesSelected();
+  dnesItems = payload.items.map(it => ({ id: it.id, order: (it.order || '').trim() }));
+  dnesSelectedIds = dnesItems.map(it => it.id);
+
+  document.getElementById('dnes-name').value = payload.title || DNES_DEFAULT_TITLE;
+  renderDnesSelected();
   renderDnesAvailable();
 }
 function filterDnesSearch(){ renderDnesAvailable(); }
@@ -608,23 +779,38 @@ function renderDnesAvailable() {
 function addToDnesSelection(id) {
   if (!dnesSelectedIds.includes(id)) {
     dnesSelectedIds.push(id);
-    dnesDirty = true;
+    dnesItems.push({ id, order:'' });
     renderDnesSelected();
     const __s = document.getElementById('dnes-search');
     if (__s && __s.value) { __s.value = ''; renderDnesAvailable(); }
-
   }
 }
+
+function editDnesOrder(idx){
+  if (!isAdmin) return;
+  const it = dnesItems[idx];
+  const s = songs.find(x => x.id === it.id);
+  const title = s ? `${s.displayId}. ${s.title}` : it.id;
+  const help = "Poradie častí napr.: 1.,R:,2.,R2:,B:\nŠpeciálne kroky: PREDOHRA(text), MEDZIHRA(text), DOHRA(text)\nPríklad: PREDOHRA(G-D-Em-C),1.,R:,2.,R:,DOHRA(R2 2x)";
+  const val = prompt(`${title}\n\n${help}`, it.order || "");
+  if (val === null) return;
+  it.order = val.trim();
+  dnesItems[idx] = it;
+  renderDnesSelected();
+}
+
 function renderDnesSelected() {
   const box = document.getElementById('dnes-selected-editor');
   if (!dnesSelectedIds.length) {
-    box.innerHTML = '<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny <span class="sad-ico"><i class="fa-solid fa-face-sad-tear"></i></span></div>';
+    box.innerHTML = `<div class="dnes-empty">Zoznam piesní na dnešný deň je prázdny <span class="sad-ico"><i class="fa-solid fa-face-sad-tear"></i></span></div>`;
     return;
   }
   box.innerHTML = dnesSelectedIds.map((id, idx) => {
     const s = songs.find(x => x.id === id);
     const left = s ? `${s.displayId}.` : id;
     const right = s ? s.title : '';
+    const ord = (dnesItems[idx]?.order || '').trim();
+    const badge = ord ? `<div style="margin-top:4px; font-size:12px; opacity:0.85;">Forma: ${escapeHtml(ord)}</div>` : `<div style="margin-top:4px; font-size:12px; opacity:0.65;">Forma: (nezadaná)</div>`;
     return `
       <div class="draggable-item"
            draggable="true"
@@ -632,43 +818,49 @@ function renderDnesSelected() {
            ondragstart="onDragStart(event,'dnes')"
            ondragover="onDragOver(event)"
            ondrop="onDrop(event,'dnes')">
-        <div style="display:flex; gap:10px; align-items:center; flex:1;">
-          <div style="color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap;">${escapeHtml(left)}</div>
-          <div style="flex:1; overflow-wrap:anywhere;">${escapeHtml(right)}</div>
+        <div style="display:flex; flex-direction:column; gap:2px; flex:1;">
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap;">${escapeHtml(left)}</div>
+            <div style="flex:1; overflow-wrap:anywhere;">${escapeHtml(right)}</div>
+          </div>
+          ${badge}
         </div>
+        <button class="small-plus" title="Forma" onclick="event.stopPropagation(); editDnesOrder(${idx})"><i class="fas fa-list"></i></button>
         <span class="drag-handle"><i class="fas fa-grip-lines"></i></span>
         <button class="small-del" onclick="removeDnesAt(${idx})">X</button>
       </div>`;
   }).join('');
 }
-function removeDnesAt(idx){ dnesSelectedIds.splice(idx,1); dnesDirty = true; renderDnesSelected(); }
+function removeDnesAt(idx){
+  dnesSelectedIds.splice(idx,1);
+  dnesItems.splice(idx,1);
+  renderDnesSelected();
+}
 function clearDnesSelection(){
-  dnesSelectedIds=[];
-  dnesDirty = true;
+  dnesSelectedIds = [];
+  dnesItems = [];
   const inp = document.getElementById('dnes-name');
-  // keep section title as default, but editor input should be empty so admin doesn't need to delete it
   if (inp) inp.value = '';
   setDnesTitle(DNES_DEFAULT_TITLE);
   renderDnesSelected();
 }
 async function saveDnesEditor() {
-  setButtonStateById('dnes-save-btn', true, '<i class="fas fa-check"></i>');
-  showToast('Ukladám…', true);
   const title = (document.getElementById('dnes-name').value || DNES_DEFAULT_TITLE).trim();
-  const payload = JSON.stringify({ title, ids: dnesSelectedIds });
+  const items = dnesSelectedIds.map((id, idx) => ({
+    songId: id,
+    order: (dnesItems[idx]?.order || '').trim()
+  }));
+  const payload = JSON.stringify({ title, items });
 
   localStorage.setItem('piesne_dnes', payload);
   setDnesTitle(title);
   loadDnesCacheFirst(true);
 
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=PiesneNaDnes&pwd=${ADMIN_PWD}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
-    dnesDirty = false;
+    await fetch(`${SCRIPT_URL}?action=save&name=PiesneNaDnes&pwd=${ADMIN_PWD}&content=__DELETED__${encodeURIComponent(payload)}`, { mode:'no-cors' });
     showToast("Uložené ✅", true);
-    setButtonStateById('dnes-save-btn', false);
   } catch(e) {
     showToast("Nepodarilo sa uložiť ❌", false);
-    setButtonStateById('dnes-save-btn', false);
   }
 }
 
@@ -708,13 +900,15 @@ function loadHistoryCacheFirst(showEmptyAllowed){
     const title = h.label || h.date || "Záznam";
     const meta = h.date ? h.date : "";
     const delBtn = isAdmin ? `<button class="history-del" onclick="event.stopPropagation(); deleteHistoryEntry(${h.ts||0})">X</button>` : '';
-    const songRows = (h.songs || []).map(id => {
-      const s = songs.find(x => x.id === String(id));
+    const songRows = (h.items || []).map(it => {
+      const s = songs.find(x => x.id === String(it.songId || it.id));
       if (!s) return '';
+      const ord = (it.order || '').trim();
+      const ordBadge = ord ? ` <span style="opacity:0.75; font-size:12px;">(${escapeHtml(ord)})</span>` : '';
       return `
-        <div class="song-row" onclick="openSongById('${s.id}','all')">
+        <div class="song-row" onclick="openSongFromHistory(${h.ts||0},'${s.id}')">
           <div class="song-id">${escapeHtml(s.displayId)}.</div>
-          <div class="song-title">${escapeHtml(s.title)}</div>
+          <div class="song-title">${escapeHtml(s.title)}${ordBadge}</div>
         </div>`;
     }).join('');
 
@@ -746,19 +940,24 @@ async function loadHistoryFromDrive(){
 
 function buildHistoryEntryFromCurrentDnes(){
   const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || "");
-  const ids = (payload.items && payload.items.length) ? payload.items.map(it => it.id || it.songId).filter(Boolean) : getDnesIds();
+  // prefer editor state if admin is editing now
+  const items = (Array.isArray(dnesSelectedIds) && dnesSelectedIds.length)
+    ? dnesSelectedIds.map((id, idx) => ({ songId: String(id), order: (dnesItems[idx]?.order || '').trim() }))
+    : (payload.items || []).map(it => ({ songId: String(it.id || it.songId), order: (it.order || '').trim() }));
+
   const now = Date.now();
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth()+1).padStart(2,'0');
   const dd = String(d.getDate()).padStart(2,'0');
   const iso = `${yyyy}-${mm}-${dd}`;
+
   return {
     ts: now,
     date: iso,
     label: todayLabelSk(d),
     title: payload.title || DNES_DEFAULT_TITLE,
-    songs: ids.map(String)
+    items
   };
 }
 
@@ -777,6 +976,20 @@ async function saveDnesToHistory(){
   } catch(e) {
     showToast('Nepodarilo sa uložiť do histórie ❌', false);
   }
+}
+
+
+function openSongFromHistory(ts, songId){
+  const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
+  const h = arr.find(x => Number(x.ts) === Number(ts));
+  if (!h) return;
+  // build mode list from that history entry
+  const ids = (h.items || []).map(it => String(it.songId || it.id));
+  currentModeList = ids.map(i => songs.find(x => x.id === i)).filter(Boolean);
+  currentListSource = 'dnes';
+  const it = (h.items || []).find(x => String(x.songId || x.id) === String(songId));
+  currentSongOrder = (it?.order || '').trim();
+  openSongById(songId, 'dnes');
 }
 
 function deleteHistoryEntry(ts){
@@ -1215,6 +1428,7 @@ function onDrop(ev, ctx) {
 
   if (ctx === 'dnes') {
     moveInArray(dnesSelectedIds, from, to);
+    moveInArray(dnesItems, from, to);
     renderDnesSelected();
     const __s = document.getElementById('dnes-search');
     if (__s && __s.value) { __s.value = ''; renderDnesAvailable(); }
