@@ -529,3 +529,16 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 .history-line:last-child{ border-bottom:none; }
 .history-line .hid{ color:#00bfff; font-weight:900; min-width:78px; text-align:right; white-space:nowrap; }
 .history-line .htitle{ flex:1; overflow-wrap:anywhere; }
+
+/* History search styled like main search */
+#history-search{
+  width:100%;
+  padding:14px;
+  font-size:16px;
+  border-radius:12px;
+  background:#1e1e1e;
+  color:#fff;
+  border:1px solid #333;
+  outline:none;
+  box-sizing:border-box;
+}
