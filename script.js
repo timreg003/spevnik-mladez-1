@@ -861,12 +861,266 @@ function songTextToHTML(text) {
   return out.join('');
 }
 
+/* ===== AKORDOVÁ ŠABLÓNA ZO SLOHY 1 (overlay) =====
+   Pravidlá:
+   - Zdroj: VŽDY iba sloha 1
+   - Aplikuje sa: IBA na slohy (2,3,4...) – nikdy na refreny/bridge
+   - Ak cieľová sloha obsahuje aspoň jeden akord (inline alebo chordline), nič sa do nej nedopĺňa
+   - Doplnenie: akordy sa vkladajú ako RIADOK NAD text (chordline), nie do textu
+   - Extra: Ak je v slohe 1 akord len v prvej časti (napr. 3 z 6 riadkov), predpokladá sa opakovanie
+           a šablóna sa doplní aj pre zvyšné riadky (4-6) cyklením od začiatku.
+   - Refren: Ak má refren akordy len v prvej časti, doplní sa iba DRUHÁ časť TOHO ISTÉHO refrenu
+             (neprenáša sa do ďalších refrenov).
+*/
+
+const LS_CHORD_TEMPLATE_ON = 'chord_template_on';
+function chordTemplateEnabled(){
+  const v = localStorage.getItem(LS_CHORD_TEMPLATE_ON);
+  // default: ON
+  return v == null ? true : (v === '1');
+}
+
+function hasChordInLine(line){
+  return /\[[^\]]+\]/.test(String(line||''));
+}
+
+function stripChordsFromLine(line){
+  return String(line||'').replace(/\[[^\]]+\]/g, '');
+}
+
+function isChordOnlyLine(line){
+  if (!hasChordInLine(line)) return false;
+  return stripChordsFromLine(line).trim() === '';
+}
+
+function extractChordsInline(line){
+  return (String(line||'').match(/\[[^\]]+\]/g) || []);
+}
+
+function classifyLabel(label){
+  const t = String(label||'');
+  if (/^\d+$/.test(t)) return { type: 'verse', index: parseInt(t,10) };
+  if (/^R\d*$/i.test(t)) return { type: 'chorus', index: 0 };
+  if (/^B\d*$/i.test(t)) return { type: 'bridge', index: 0 };
+  return { type: 'other', index: 0 };
+}
+
+function splitTextIntoSegments(text){
+  const lines = String(text||'').split('\n');
+  const segs = [];
+  let cur = null;
+
+  function pushCur(){
+    if (cur) segs.push(cur);
+    cur = null;
+  }
+
+  for (const line of lines){
+    const trimmed = String(line).trim();
+    const only = parseMarkerOnly(trimmed);
+    const withText = parseMarkerWithText(trimmed);
+
+    if (only){
+      pushCur();
+      const cls = classifyLabel(only);
+      cur = { kind:'block', label: only, type: cls.type, index: cls.index, header: line, body: [] };
+      continue;
+    }
+    if (withText){
+      pushCur();
+      const cls = classifyLabel(withText.label);
+      // marker+text je súčasť tela (zachováme originálny riadok)
+      cur = { kind:'block', label: withText.label, type: cls.type, index: cls.index, header: null, body: [line] };
+      continue;
+    }
+
+    if (!cur){
+      segs.push({ kind:'plain', lines:[line] });
+    } else {
+      cur.body.push(line);
+    }
+  }
+
+  pushCur();
+  return segs;
+}
+
+function getLyricInfos(blockBody){
+  const infos = [];
+  const body = Array.isArray(blockBody) ? blockBody : [];
+
+  for (let i=0; i<body.length; i++){
+    const line = String(body[i] ?? '');
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // chordline nad textom
+    if (isChordOnlyLine(line)){
+      // nájdi najbližší nasledujúci ne-prázdny riadok (lyric)
+      let j = i+1;
+      while (j < body.length && String(body[j]??'').trim()==='') j++;
+      if (j < body.length){
+        const lyricLine = String(body[j] ?? '');
+        infos.push({ lineIndex: j, chordPattern: line.trim(), hasAnyChords: true, hasChordlineAbove: true });
+        i = j; // preskoč lyric
+        continue;
+      }
+    }
+
+    // lyric riadok
+    const chords = extractChordsInline(line);
+    infos.push({
+      lineIndex: i,
+      chordPattern: chords.length ? chords.join(' ') : '',
+      hasAnyChords: chords.length>0,
+      hasChordlineAbove: false
+    });
+  }
+
+  return infos;
+}
+
+function blockHasAnyChordsRaw(block){
+  const body = (block && Array.isArray(block.body)) ? block.body : [];
+  return body.some(l => hasChordInLine(l));
+}
+
+function fillTrailingByRepeating(patterns){
+  const out = patterns.slice();
+  let lastNonEmpty = -1;
+  for (let i=0;i<out.length;i++) if (out[i]) lastNonEmpty = i;
+  const p = lastNonEmpty + 1;
+  if (p <= 0 || p >= out.length) return out;
+  // dopĺň iba ak po p sú všetky prázdne
+  for (let i=p;i<out.length;i++){
+    if (out[i]) return out;
+  }
+  for (let i=p;i<out.length;i++){
+    out[i] = out[i] || out[i % p] || '';
+  }
+  return out;
+}
+
+function buildVerse1TemplateFromSegments(segs){
+  const verse1 = segs.find(s => s.kind==='block' && s.type==='verse' && s.index===1);
+  if (!verse1) return null;
+
+  const infos = getLyricInfos(verse1.body);
+  const patterns = infos.map(x => x.chordPattern || '');
+  const filled = fillTrailingByRepeating(patterns);
+
+  // Ak v slohe 1 nie je žiadny akord, nerob nič
+  if (!filled.some(p => p)) return null;
+  return filled;
+}
+
+function applyVerse1TemplateToVerseBlock(block, template){
+  if (!template) return block;
+  if (!block || block.type!=='verse' || block.index===1) return block;
+  // ak sloha už má akordy, nezasahuj
+  if (blockHasAnyChordsRaw(block)) return block;
+
+  const body = block.body.slice();
+  const lyricInfos = getLyricInfos(body);
+  const insertBefore = new Map();
+
+  let li = 0;
+  for (const info of lyricInfos){
+    const pat = template[li] || '';
+    if (pat) insertBefore.set(info.lineIndex, pat);
+    li++;
+  }
+
+  if (insertBefore.size === 0) return block;
+
+  const newBody = [];
+  for (let i=0;i<body.length;i++){
+    if (insertBefore.has(i)) newBody.push(insertBefore.get(i));
+    newBody.push(body[i]);
+  }
+
+  return { ...block, body: newBody };
+}
+
+function fillHalfChorusOnce(segs){
+  let done = false;
+  return segs.map(seg => {
+    if (done) return seg;
+    if (!(seg && seg.kind==='block' && seg.type==='chorus')) return seg;
+    if (!blockHasAnyChordsRaw(seg)) return seg; // bez akordov nič
+
+    const body = seg.body.slice();
+    const infos = getLyricInfos(body);
+    const patterns = infos.map(x => x.chordPattern || '');
+    const filled = fillTrailingByRepeating(patterns);
+
+    // nič na doplnenie
+    if (filled.join('\u0000') === patterns.join('\u0000')) return seg;
+
+    const insertBefore = new Map();
+    for (let i=0;i<infos.length;i++){
+      const wasEmpty = !patterns[i];
+      const now = filled[i] || '';
+      if (wasEmpty && now){
+        // ak lyric riadok už náhodou obsahuje akordy, nestrkaj nad neho
+        const line = String(body[infos[i].lineIndex] ?? '');
+        if (!hasChordInLine(line)) insertBefore.set(infos[i].lineIndex, now);
+      }
+    }
+    if (insertBefore.size === 0) return seg;
+
+    const newBody = [];
+    for (let i=0;i<body.length;i++){
+      if (insertBefore.has(i)) newBody.push(insertBefore.get(i));
+      newBody.push(body[i]);
+    }
+
+    done = true;
+    return { ...seg, body: newBody };
+  });
+}
+
+function applyChordTemplateOverlay(text){
+  if (!chordTemplateEnabled()) return text;
+
+  let segs = splitTextIntoSegments(text);
+
+  // 1) Doplň druhú polovicu refrenu iba v prvom refrene, kde sú akordy len v prvej časti
+  segs = fillHalfChorusOnce(segs);
+
+  // 2) Šablóna zo slohy 1 (doplní sa aj na koniec ak chýbajú)
+  const verseTemplate = buildVerse1TemplateFromSegments(segs);
+  if (!verseTemplate) {
+    // stále vráť text s prípadným chorus half-fill
+    return segs.map(s => {
+      if (s.kind==='plain') return s.lines.join('\n');
+      return (s.header ? [s.header, ...s.body] : s.body).join('\n');
+    }).join('\n');
+  }
+
+  // 3) Aplikuj iba na slohy 2+ (nie na refreny/bridge)
+  segs = segs.map(seg => {
+    if (!(seg && seg.kind==='block')) return seg;
+    if (seg.type !== 'verse') return seg;
+    if (seg.index === 1) return seg;
+    return applyVerse1TemplateToVerseBlock(seg, verseTemplate);
+  });
+
+  return segs.map(s => {
+    if (s.kind==='plain') return s.lines.join('\n');
+    return (s.header ? [s.header, ...s.body] : s.body).join('\n');
+  }).join('\n');
+}
+
 
 function renderSong() {
   if (!currentSong) return;
   let text = (currentListSource === 'dnes' && currentDnesOrder)
     ? buildOrderedSongText(currentSong, currentDnesOrder)
     : currentSong.origText;
+
+  // Akordová šablóna zo slohy 1 (overlay) + doplnenie 2. polovice prvého refrenu (iba v rámci toho refrenu)
+  text = applyChordTemplateOverlay(text);
 
   // Zredukuj extrémne medzery (najmä po značkách 1., R:, B:, Refren, Bridge, Predohra..., Transpozícia...)
   // - odstráni prázdne riadky hneď po značke
