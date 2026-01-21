@@ -366,29 +366,40 @@ body.present #presentControls{ display:flex; }
   text-align: left;
 }
 
-/* Chip remove (krížik) */
+/* Chip controls (šípky + krížik) – v editore poradia (Forma) */
 .chip{
-  position: relative;
-  padding-right: 34px;
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
+.chip .chip-text{
+  flex:1;
+  text-align:center;
+  overflow-wrap:anywhere;
+  min-width:0;
+}
+.chip .chip-move,
 .chip .chip-x{
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.25);
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.25);
   background: rgba(0,0,0,.25);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 900;
-  font-size: 12px;
-  line-height: 1;
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  font-size:14px;
+  line-height:1;
+  cursor:pointer;
 }
+.chip .chip-move:disabled,
+.chip .chip-x:disabled{
+  opacity:0.35;
+  cursor:default;
+}
+.chip.special .chip-move,
 .chip.special .chip-x{
   border-color: rgba(0,191,255,.35);
   color: #00bfff;
@@ -608,11 +619,9 @@ body.present #presentControls{ display:flex; }
   background:#222;
   color:#fff;
   border-radius:999px;
-  padding:8px 34px 8px 12px; /* right padding for X */
+  padding:8px 10px;
   font-weight:900;
-  cursor:pointer;
   user-select:none;
-  position: relative;
 }
 .chip.special{
   background:rgba(0,191,255,0.15);
