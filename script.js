@@ -2685,6 +2685,140 @@ function escapeHtml(s) {
   }[m]));
 }
 
+/* ===== EDIT SONG SUGGESTION (Formspree) ===== */
+function insertAtCursor(textarea, insert) {
+  if (!textarea) return;
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(end);
+  textarea.value = before + insert + after;
+  const pos = start + insert.length;
+  textarea.focus();
+  try { textarea.setSelectionRange(pos, pos); } catch(e) {}
+}
+
+function deleteNearestChord(textarea){
+  if (!textarea) return;
+  const pos = textarea.selectionStart ?? 0;
+  const v = textarea.value || "";
+  const left = v.lastIndexOf('[', pos);
+  if (left === -1) return;
+  const right = v.indexOf(']', left);
+  if (right === -1) return;
+  textarea.value = v.slice(0, left) + v.slice(right + 1);
+  textarea.focus();
+  try { textarea.setSelectionRange(left, left); } catch(e) {}
+}
+
+function simpleLineDiff(original, proposed) {
+  const a = String(original || "").replace(/\r/g,'').split('\n');
+  const b = String(proposed || "").replace(/\r/g,'').split('\n');
+  const max = Math.max(a.length, b.length);
+  const out = [];
+  for (let i = 0; i < max; i++) {
+    const oa = a[i] ?? '';
+    const ob = b[i] ?? '';
+    if (oa === ob) continue;
+    if (oa) out.push(`- ${oa}`);
+    if (ob) out.push(`+ ${ob}`);
+  }
+  return out.join('\n');
+}
+
+function diffToHtml(diffText){
+  const lines = String(diffText || "").split('\n');
+  return lines.map(line => {
+    if (line.startsWith('- ')) return `<div style="color:#ff4444;text-decoration:line-through">${escapeHtml(line)}</div>`;
+    if (line.startsWith('+ ')) return `<div style="color:#ff4444">${escapeHtml(line)}</div>`;
+    return `<div>${escapeHtml(line)}</div>`;
+  }).join('');
+}
+
+function showEditSongModal(){
+  if (!currentSong) { showToast('Najprv otvor pieseň.', false); return; }
+  const overlay = document.getElementById('edit-song-modal');
+  const meta = document.getElementById('edit-song-meta');
+  const taO = document.getElementById('edit-original');
+  const taP = document.getElementById('edit-proposed');
+  const diff = document.getElementById('edit-diff');
+  if (!overlay || !taO || !taP) return;
+
+  const title = `${currentSong.displayId}. ${currentSong.title}`;
+  if (meta) meta.innerHTML = `Pieseň: <b>${escapeHtml(title)}</b>`;
+  taO.value = currentSong.origText || '';
+  taP.value = currentSong.origText || '';
+  if (diff) diff.textContent = '(bez zmien)';
+  overlay.style.display = 'flex';
+  // render initial diff
+  setTimeout(updateEditSongDiff, 0);
+  setTimeout(() => { try { taP.focus(); } catch(e) {} }, 0);
+}
+
+function closeEditSongModal(){
+  const overlay = document.getElementById('edit-song-modal');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function updateEditSongDiff(){
+  const taO = document.getElementById('edit-original');
+  const taP = document.getElementById('edit-proposed');
+  const diffEl = document.getElementById('edit-diff');
+  if (!taO || !taP || !diffEl) return;
+  const d = simpleLineDiff(taO.value, taP.value);
+  diffEl.textContent = d || '(bez zmien)';
+}
+
+function sendEditSongSuggestion(){
+  if (!currentSong) { showToast('Najprv otvor pieseň.', false); return; }
+  const form = document.getElementById('error-form');
+  const taO = document.getElementById('edit-original');
+  const taP = document.getElementById('edit-proposed');
+  if (!form || !taO || !taP) return;
+
+  const proposedText = String(taP.value || '');
+  const originalText = String(taO.value || '');
+  const diffText = simpleLineDiff(originalText, proposedText);
+  const diffHtml = diffToHtml(diffText);
+
+  const MAX = 25000;
+  if (proposedText.length > MAX) {
+    alert(`Text návrhu je príliš dlhý (${proposedText.length} znakov). Skús ho skrátiť.`);
+    return;
+  }
+
+  const songTitle = `${currentSong.displayId}. ${currentSong.title}`;
+  const songId = String(currentSong.displayId || currentSong.id || '');
+
+  // fill hidden fields
+  const fTitle = document.getElementById('fSongTitle');
+  const fId = document.getElementById('fSongId');
+  const fType = document.getElementById('fType');
+  const fProp = document.getElementById('fProposedText');
+  const fDiff = document.getElementById('fDiffText');
+  const fDiffH = document.getElementById('fDiffHtml');
+  if (fTitle) fTitle.value = songTitle;
+  if (fId) fId.value = songId;
+  if (fType) fType.value = 'navrh_upravy_piesne';
+  if (fProp) fProp.value = proposedText;
+  if (fDiff) fDiff.value = diffText;
+  if (fDiffH) fDiffH.value = diffHtml;
+
+  // subject for email
+  const subj = document.getElementById('error-subject');
+  if (subj) subj.value = `Návrh úpravy piesne: ${songTitle}`;
+
+  closeEditSongModal();
+
+  // submit the existing form (native validation will run)
+  try {
+    form.requestSubmit();
+  } catch(e) {
+    // fallback
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+}
+
 
 /* ===== FONT SIZE UI (DETAIL) ===== */
 function updateFontSizeLabel(){
@@ -2747,6 +2881,52 @@ document.addEventListener('DOMContentLoaded', () => {
   updateFontSizeLabel();
   initSongPinchToZoom();
   updateChordTemplateUI();
+
+  // Edit-song suggestion UI (Formspree)
+  (function initEditSuggestion(){
+    const btn = document.getElementById('btnEditSong');
+    if (btn) btn.addEventListener('click', showEditSongModal);
+
+    const overlay = document.getElementById('edit-song-modal');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeEditSongModal();
+      });
+    }
+
+    const taP = document.getElementById('edit-proposed');
+    if (taP) taP.addEventListener('input', () => {
+      // lightweight debounce
+      clearTimeout(window.__editDiffTimer);
+      window.__editDiffTimer = setTimeout(updateEditSongDiff, 120);
+    });
+
+    const panel = document.getElementById('chord-panel');
+    if (panel && taP) {
+      panel.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!t) return;
+        if (t.id === 'custom-chord-insert') {
+          const inp = document.getElementById('custom-chord');
+          const val = (inp ? inp.value : '').trim();
+          if (val) insertAtCursor(taP, `[${val}]`);
+          if (inp) inp.value = '';
+          updateEditSongDiff();
+          return;
+        }
+        if (t.id === 'delete-nearest-chord') {
+          deleteNearestChord(taP);
+          updateEditSongDiff();
+          return;
+        }
+        const chord = t.getAttribute && t.getAttribute('data-chord');
+        if (chord) {
+          insertAtCursor(taP, chord);
+          updateEditSongDiff();
+        }
+      });
+    }
+  })();
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
