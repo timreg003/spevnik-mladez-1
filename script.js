@@ -860,13 +860,17 @@ function songTextToHTML(text) {
         }
         pendingChordLines.length = 0;
         pendingLabel = '';
+        // Ukonči tento akordový-only blok.
         closeSection();
       } else if (pendingChordLines.length) {
-        // Akordy bez labelu (pred prvým markerom) – zobraz ich, aby sa nestratili.
-        closeSection();
-        openSection();
+        // Máme "dozvuky" akordových riadkov, ktoré patria k predchádzajúcemu bloku.
+        // Najmä pri 999 piesňach je bežné, že po texte nasledujú ešte ďalšie akordové riadky
+        // (bez textu) a až potom príde nový marker. Tieto riadky musia zostať v TOM ISTOM
+        // odseku/bloku (nie v novom song-section).
+        if (!sectionOpen) openSection();
         for (const cl of pendingChordLines) out.push(songLineHTML('', cl, 'song-chordline'));
         pendingChordLines.length = 0;
+        // teraz môžeme uzavrieť predchádzajúci blok pred novým markerom
         closeSection();
       }
 
