@@ -15,7 +15,7 @@
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css?v=18"/>
+  <link rel="stylesheet" href="style.css?v=19"/>
 </head>
 
 <body>
@@ -173,6 +173,14 @@
         </div>
         <span id="speed-label" class="tiny-label">Rýchlosť: 1</span>
       </div>
+
+      <div class="control-group">
+        <small>Prezentácia</small>
+        <div class="btn-row">
+          <button id="present-btn" onclick="togglePresentationMode()"><i class="fas fa-tv"></i></button>
+        </div>
+        <span class="tiny-label">Režim</span>
+      </div>
     </div>
 
     <div id="song-content"></div>
@@ -193,7 +201,6 @@
     </div>
 
   </div>
-
 </div>
 
 <!-- ✅ FLOATING GEAR BUTTON (LEFT) -->
@@ -207,7 +214,16 @@
   </div>
 </div>
 
-<script src="script.js?v=21"></script>
+<!-- PREZENTAČNÝ REŽIM: OVERLAY OVLÁDANIE -->
+<div id="presentControls" aria-hidden="true">
+  <button id="psSlower" onclick="presentSlower()" aria-label="Pomalšie"><i class="fas fa-minus"></i></button>
+  <button id="psPlayPause" onclick="presentPlayPause()" aria-label="Play/Pause"><i class="fas fa-play"></i></button>
+  <button id="psFaster" onclick="presentFaster()" aria-label="Rýchlejšie"><i class="fas fa-plus"></i></button>
+  <span id="psSpeed" class="psSpeed">Rýchlosť: 1</span>
+  <button id="psExit" onclick="exitPresentationMode()" aria-label="Ukončiť"><i class="fas fa-xmark"></i></button>
+</div>
+
+<script src="script.js?v=22"></script>
 
   <!-- FORM EDITOR MODAL -->
   <div id="form-modal" class="modal-overlay" style="display:none;">
@@ -227,7 +243,13 @@
         <div class="modal-block">
           <div class="modal-label">Poradie</div>
           <div id="form-order" class="form-order"></div>
-          <div class="modal-hint">Klikni na položku v poradí pre odstránenie.</div>
+          <div class="modal-hint">Klikni na bežnú položku v poradí pre odstránenie. Špeciálne (Predohra/Medzihra/Dohra) klikom upravíš.</div>
+        </div>
+
+        <div class="modal-block">
+          <div class="modal-label">História piesne</div>
+          <div id="form-history" class="form-history"></div>
+          <div class="modal-hint">Klikni na záznam a nastaví sa poradie tak, ako bolo v histórii.</div>
         </div>
 
         <div class="modal-block">
