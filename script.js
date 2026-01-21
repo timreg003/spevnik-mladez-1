@@ -455,25 +455,69 @@ function navigateSong(d) {
   if (n) openSongById(n.id, currentListSource);
 }
 
+function parseBlockMarker(line){
+  const t = String(line || '').trim();
+  let m;
+
+  // Číslo slohy: "1", "1.", "1)","1 Text..."
+  m = t.match(/^(\d+)(?:[.)])?(?:\s+|$)(.*)$/);
+  if (m){
+    const num = m[1];
+    const rest = (m[2] || '').trim();
+    return { key: `${num}.`, rest };
+  }
+
+  // Refren: "R:", "R2:", "R text", "R", "Refren", "Refren: text"
+  m = t.match(/^R(\d*)\s*:\s*(.*)$/i);
+  if (m) return { key: `R${m[1] || ''}:`, rest: (m[2] || '').trim() };
+  m = t.match(/^R(\d*)\s+(.*)$/i);
+  if (m) return { key: `R${m[1] || ''}:`, rest: (m[2] || '').trim() };
+  m = t.match(/^R(\d*)\s*$/i);
+  if (m) return { key: `R${m[1] || ''}:`, rest: '' };
+
+  m = t.match(/^Refren\s*:?\s*(.*)$/i);
+  if (m) return { key: `R:`, rest: (m[1] || '').trim() };
+
+  // Bridge: "B:", "B1:", "B text", "B", "Bridge", "Bridge: text"
+  m = t.match(/^B(\d*)\s*:\s*(.*)$/i);
+  if (m) return { key: `B${m[1] || ''}:`, rest: (m[2] || '').trim() };
+  m = t.match(/^B(\d*)\s+(.*)$/i);
+  if (m) return { key: `B${m[1] || ''}:`, rest: (m[2] || '').trim() };
+  m = t.match(/^B(\d*)\s*$/i);
+  if (m) return { key: `B${m[1] || ''}:`, rest: '' };
+
+  m = t.match(/^Bridge\s*:?\s*(.*)$/i);
+  if (m) return { key: `B:`, rest: (m[1] || '').trim() };
+
+  return null;
+}
+
 function splitSongIntoBlocks(origText){
   const lines = (origText||"").split(/\r?\n/);
-  const markerRe = /^(\d+\.|R\d*:\s*|B\d*:\s*)\s*$/;
   const blocks = {};
   let current = null;
+
   for (let i=0;i<lines.length;i++){
     const ln = lines[i];
-    const t = ln.trim();
-    if (markerRe.test(t)){
-      current = t.replace(/\s+/g,'');
+    const t = (ln || '').trim();
+
+    const mk = parseBlockMarker(t);
+    if (mk){
+      current = mk.key.replace(/\s+/g,'');
       if (!blocks[current]) blocks[current] = [];
+      if (mk.rest){
+        blocks[current].push(mk.rest);
+      }
       continue;
     }
+
     if (current){
       blocks[current].push(ln);
     }
   }
   return blocks;
 }
+
 
 function extractTopTranspose(origText){
   const first = (origText||"").split(/\r?\n/)[0]?.trim() || "";
@@ -669,15 +713,33 @@ function songTextToHTML(text) {
   const lines = String(text || '').split('\n');
   let pendingLabel = '';
   let pendingSpecial = '';
+  let sectionOpen = false;
   const out = [];
+
+  function openSection(){
+    if (!sectionOpen){
+      out.push('<div class="song-section">');
+      sectionOpen = true;
+    }
+  }
+  function closeSection(){
+    if (sectionOpen){
+      out.push('</div>');
+      sectionOpen = false;
+    }
+  }
 
   for (const raw of lines) {
     const line = String(raw ?? '');
     const trimmed = line.trim();
 
-    // Blank line: keep spacing, but don't break alignment
+    // Blank line
     if (!trimmed) {
-      out.push('<div class="song-line song-blank"><span class="song-label"></span><span class="song-line-text"></span></div>');
+      if (sectionOpen){
+        out.push('<div class="song-line song-blank"><span class="song-label"></span><span class="song-line-text"></span></div>');
+      } else {
+        out.push('<div class="song-line song-blank"><span class="song-label"></span><span class="song-line-text"></span></div>');
+      }
       continue;
     }
 
@@ -685,15 +747,15 @@ function songTextToHTML(text) {
     const mt = trimmed.match(/^Transpozícia:\s*([+-]?\d+)\s*$/i);
     if (mt) {
       pendingLabel = '';
+      pendingSpecial = '';
+      closeSection();
       out.push(
         `<div class="song-line song-transpose-row"><span class="song-label"></span><span class="song-line-text">Transpozícia: <span class="song-transpose">${escapeHTML(mt[1])}</span></span></div>`
       );
       continue;
     }
 
-    // Predohra / Medzihra / Dohra
-    // - "Predohra: text" => 1 riadok (zvýraznené)
-    // - "Predohra:" (bez textu) => spojí sa s najbližším riadkom textu
+    // Predohra / Medzihra / Dohra (zvýraznené riadky)
     const spOnly = parseSpecialMarkerOnly(trimmed);
     if (spOnly){
       pendingLabel = '';
@@ -704,6 +766,7 @@ function songTextToHTML(text) {
     if (sp){
       pendingLabel = '';
       pendingSpecial = '';
+      closeSection();
       const txt = sp.kind + (sp.rest ? `: ${sp.rest}` : ':');
       out.push(songLineHTML('', txt, 'song-special-row'));
       continue;
@@ -712,6 +775,8 @@ function songTextToHTML(text) {
     // Marker-only line (1., R:, B:, Refren, Bridge...)
     const only = parseMarkerOnly(trimmed);
     if (only) {
+      // nový blok -> zavri starý
+      closeSection();
       pendingLabel = only;
       continue;
     }
@@ -719,13 +784,15 @@ function songTextToHTML(text) {
     // Marker + text in one line (e.g. "1 Text", "R: Text", "Bridge text")
     const withText = parseMarkerWithText(trimmed);
     if (withText) {
-      pendingLabel = '';
+      closeSection();
+      openSection();
       out.push(songLineHTML(withText.label, withText.text));
       continue;
     }
 
     // Ak čaká Predohra/Medzihra/Dohra, prilep ju na prvý nasledujúci textový riadok
     if (pendingSpecial){
+      closeSection();
       out.push(songLineHTML('', `${pendingSpecial}: ${line.trim()}`, 'song-special-row'));
       pendingSpecial = '';
       continue;
@@ -733,15 +800,24 @@ function songTextToHTML(text) {
 
     // Normal line: if we have a pending label, use it only for this first content line
     if (pendingLabel) {
+      closeSection();
+      openSection();
       out.push(songLineHTML(pendingLabel, line));
       pendingLabel = '';
     } else {
-      out.push(songLineHTML('', line));
+      // pokračovanie aktuálneho bloku (ak existuje), inak voľný text
+      if (sectionOpen){
+        out.push(songLineHTML('', line));
+      } else {
+        out.push(songLineHTML('', line));
+      }
     }
   }
 
+  closeSection();
   return out.join('');
 }
+
 
 function renderSong() {
   if (!currentSong) return;
@@ -1023,25 +1099,38 @@ let formModalSongId = null;
 
 function extractAvailableMarkersFromSong(song){
   const lines = (song.origText || "").split(/\r?\n/);
-  const markerRe = /^(\d+\.|R\d*:\s*|B\d*:\s*)\s*$/;
   const set = new Set();
+
   for (const ln of lines){
-    const t = ln.trim();
-    if (markerRe.test(t)) set.add(t.replace(/\s+/g,''));
+    const t = (ln || '').trim();
+    if (!t) continue;
+    const mk = parseBlockMarker(t);
+    if (mk){
+      set.add(String(mk.key || '').replace(/\s+/g,''));
+    }
   }
+
+  // zoradenie: čísla, potom R, potom B
   const arr = Array.from(set);
   arr.sort((a,b)=>{
     const an = /^\d+\./.test(a), bn = /^\d+\./.test(b);
     if (an && bn) return parseInt(a) - parseInt(b);
     if (an && !bn) return -1;
     if (!an && bn) return 1;
+
     const ar = /^R\d*:/.test(a), br = /^R\d*:/.test(b);
     if (ar && !br) return -1;
     if (!ar && br) return 1;
+
+    const ab = /^B\d*:/.test(a), bb = /^B\d*:/.test(b);
+    if (ab && !bb) return -1;
+    if (!ab && bb) return 1;
+
     return a.localeCompare(b,'sk');
   });
   return arr;
 }
+
 
 function buildPreviewHtml(song){
   const lines = (song.origText || "").split(/\r?\n/).slice(0, 180);
@@ -1105,13 +1194,44 @@ function renderFormModalButtons(){
   box.innerHTML = formModalAvailable.map(m => `<button class="chip-btn" onclick="addOrderToken('${m}')">${escapeHtml(m)}</button>`).join('');
 }
 
+function normalizeOrderString(orderStr){
+  const tokens = parseOrderTokens(String(orderStr || ''));
+  if (!tokens.length) return '';
+  const normTokens = tokens.map(t=>{
+    let s = String(t || '').trim();
+    if (!s) return '';
+
+    // špeciálne kroky (Predohra/Medzihra/Dohra)
+    let m = s.match(/^(PREDOHRA|MEDZIHRA|DOHRA)(?:\((.*)\))?$/i);
+    if (m){
+      const kind = m[1].toUpperCase();
+      const note = (m[2] || '').trim();
+      return note ? `${kind}(${note})` : kind;
+    }
+
+    // čísla sloh
+    m = s.match(/^(\d+)\.?$/);
+    if (m) return `${m[1]}.`;
+
+    // R/B
+    m = s.match(/^R(\d*):?$/i);
+    if (m) return `R${m[1] || ''}:`;
+    m = s.match(/^B(\d*):?$/i);
+    if (m) return `B${m[1] || ''}:`;
+
+    return s.replace(/\s+/g,'');
+  }).filter(Boolean);
+
+  return normTokens.join(',');
+}
+
 function getSongOrderHistoryForModal(songId){
   const sid = String(songId || '');
   if (!sid) return [];
   const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
   if (!Array.isArray(arr) || !arr.length) return [];
 
-  // orderStr -> {ts,title,order}
+  // orderNorm -> {ts,title,order}
   const best = new Map();
   for (const h of arr){
     const ts = Number(h.ts || 0);
@@ -1119,17 +1239,21 @@ function getSongOrderHistoryForModal(songId){
     const items = Array.isArray(h.items) ? h.items : [];
     const it = items.find(x => String(x.songId || x.id || '') === sid);
     if (!it) continue;
-    const order = String(it.order || '').trim();
-    if (!order) continue;
-    const prev = best.get(order);
+
+    const orderNorm = normalizeOrderString(it.order || '');
+    if (!orderNorm) continue;
+
+    const prev = best.get(orderNorm);
     if (!prev || ts > prev.ts){
-      best.set(order, { ts, title, order });
+      best.set(orderNorm, { ts, title, order: orderNorm });
     }
   }
+
   const out = Array.from(best.values());
   out.sort((a,b) => (b.ts||0) - (a.ts||0));
   return out;
 }
+
 
 function applyHistoryOrder(orderStr){
   formModalOrder = parseOrderTokens(String(orderStr || ''));
@@ -1143,10 +1267,18 @@ function applyHistoryOrderEncoded(enc){
 function renderFormModalHistory(){
   const box = document.getElementById('form-history');
   if (!box) return;
+
   if (!formModalSongId){
     box.innerHTML = '';
     return;
   }
+
+  const s = songs.find(x => String(x.id) === String(formModalSongId));
+  if (s && isSong999(s)){
+    box.innerHTML = '<div class="form-history-empty">Pre pieseň 999 sa história poradia nezobrazuje.</div>';
+    return;
+  }
+
   const hist = getSongOrderHistoryForModal(formModalSongId).slice(0, 12);
   if (!hist.length){
     box.innerHTML = '<div class="form-history-empty">Zatiaľ nie je v histórii uložené žiadne poradie pre túto pieseň.</div>';
@@ -1160,6 +1292,7 @@ function renderFormModalHistory(){
     </div>`;
   }).join('');
 }
+
 
 function renderFormModalOrder(){
   const box = document.getElementById('form-order');
@@ -1530,12 +1663,18 @@ async function saveDnesToHistory(){
   showToast('Ukladám do histórie…', true);
 
   const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
-  arr.push(buildHistoryEntryFromCurrentDnes());
-  localStorage.setItem(LS_HISTORY, JSON.stringify(arr));
+  const entry = buildHistoryEntryFromCurrentDnes();
+  const titleNorm = normText(historyEntryTitle(entry));
+
+  // Ak už existuje záznam s rovnakým názvom, prepíš ho (zabráni duplikátom)
+  const next = arr.filter(h => normText(historyEntryTitle(h)) !== titleNorm);
+  next.push(entry);
+
+  localStorage.setItem(LS_HISTORY, JSON.stringify(next));
   renderHistoryUI(true);
 
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' });
     showToast('Uložené do histórie ✅', true);
   } catch(e) {
     showToast('Nepodarilo sa uložiť do histórie ❌', false);
@@ -1543,6 +1682,7 @@ async function saveDnesToHistory(){
     loadHistoryFromDrive();
   }
 }
+
 
 function deleteHistoryEntry(ts){
   if (!isAdmin) return;
