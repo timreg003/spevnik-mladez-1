@@ -304,6 +304,16 @@ body.present #presentControls{ display:flex; }
   color:#fff;
 }
 
+
+/* Oddelenie blokov: sloha / refren / bridge */
+#song-content .song-section{
+  border-top: 1px solid rgba(255,255,255,.18);
+  border-bottom: 1px solid rgba(255,255,255,.18);
+  padding: .35rem 0;
+  margin: .55rem 0;
+  border-radius: 8px;
+}
+
 /* Riadky piesne: label vľavo, text centrovaný (v 1 riadku) */
 #song-content .song-line{
   display:grid;
