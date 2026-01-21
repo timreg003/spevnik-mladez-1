@@ -843,6 +843,15 @@ function songTextToHTML(text) {
 
     // Normal line: if we have a pending label, use it only for this first content line
     if (pendingLabel) {
+      // Ak je nasledujúci riadok iba akordový (chordline), neprišívaj label na akordy.
+      // Label nech sa použije až na prvý textový riadok v bloku.
+      const chordOnly = /\[[^\]]+\]/.test(line) && String(line).replace(/\[[^\]]+\]/g, '').trim() === '';
+      if (chordOnly) {
+        closeSection();
+        openSection();
+        out.push(songLineHTML('', line, 'song-chordline'));
+        continue;
+      }
       closeSection();
       openSection();
       out.push(songLineHTML(pendingLabel, line));
@@ -876,9 +885,29 @@ function songTextToHTML(text) {
 const LS_CHORD_TEMPLATE_ON = 'chord_template_on';
 function chordTemplateEnabled(){
   const v = localStorage.getItem(LS_CHORD_TEMPLATE_ON);
-  // default: ON
-  return v == null ? true : (v === '1');
+  // default: OFF (zapína sa cez tlačidlo)
+  return v == null ? false : (v === '1');
 }
+
+function setChordTemplateEnabled(on){
+  localStorage.setItem(LS_CHORD_TEMPLATE_ON, on ? '1' : '0');
+}
+
+function toggleChordTemplate(){
+  setChordTemplateEnabled(!chordTemplateEnabled());
+  updateChordTemplateUI();
+  renderSong();
+}
+
+function updateChordTemplateUI(){
+  const btn = document.getElementById('tmpl-btn');
+  const lab = document.getElementById('tmpl-label');
+  if (!btn || !lab) return;
+  const on = chordTemplateEnabled();
+  btn.classList.toggle('active', on);
+  lab.textContent = on ? 'Šablóna: ON' : 'Šablóna: OFF';
+}
+
 
 function hasChordInLine(line){
   return /\[[^\]]+\]/.test(String(line||''));
@@ -949,31 +978,34 @@ function getLyricInfos(blockBody){
   const infos = [];
   const body = Array.isArray(blockBody) ? blockBody : [];
 
+  // Map chord-only lines to the immediate next line index (even if blank).
+  // This keeps the "line index" mapping stable for template alignment.
+  const chordlineForIndex = new Map();
+  for (let i=0; i<body.length-1; i++){
+    const line = String(body[i] ?? '');
+    if (isChordOnlyLine(line)){
+      chordlineForIndex.set(i+1, line.trim());
+    }
+  }
+
   for (let i=0; i<body.length; i++){
     const line = String(body[i] ?? '');
-    const trimmed = line.trim();
-    if (!trimmed) continue;
 
-    // chordline nad textom
-    if (isChordOnlyLine(line)){
-      // nájdi najbližší nasledujúci ne-prázdny riadok (lyric)
-      let j = i+1;
-      while (j < body.length && String(body[j]??'').trim()==='') j++;
-      if (j < body.length){
-        const lyricLine = String(body[j] ?? '');
-        infos.push({ lineIndex: j, chordPattern: line.trim(), hasAnyChords: true, hasChordlineAbove: true });
-        i = j; // preskoč lyric
-        continue;
-      }
+    // chord-only line itself is not a lyric line
+    if (isChordOnlyLine(line)) continue;
+
+    let chordPattern = chordlineForIndex.get(i) || '';
+    let inline = [];
+    if (!chordPattern){
+      inline = extractChordsInline(line);
+      chordPattern = inline.length ? inline.join(' ') : '';
     }
 
-    // lyric riadok
-    const chords = extractChordsInline(line);
     infos.push({
       lineIndex: i,
-      chordPattern: chords.length ? chords.join(' ') : '',
-      hasAnyChords: chords.length>0,
-      hasChordlineAbove: false
+      chordPattern,
+      hasAnyChords: !!chordPattern,
+      hasChordlineAbove: chordlineForIndex.has(i)
     });
   }
 
@@ -1155,6 +1187,7 @@ function renderSong() {
 
   // sync presentation overlay
   updatePresentationUI();
+  updateChordTemplateUI();
 }
 
 function transposeChord(c, step) {
@@ -2670,6 +2703,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!isNaN(savedSong)) fontSize = Math.max(12, Math.min(34, savedSong));
   updateFontSizeLabel();
   initSongPinchToZoom();
+  updateChordTemplateUI();
 
   toggleSection('dnes', false);
   toggleSection('playlists', false);
