@@ -761,7 +761,7 @@ function songTextToHTML(text) {
   const lines = String(text || '').split('\n');
   let pendingLabel = '';
   let pendingSpecial = '';
-  let pendingChordLine = '';
+  let pendingChordLines = [];
   let sectionOpen = false;
   // Buffer empty lines so we can drop them if they end up at the end of a section
   // (sloha/refren/bridge). This saves vertical space without removing spacing inside blocks.
@@ -848,7 +848,7 @@ function songTextToHTML(text) {
     if (only) {
       // nový blok -> zavri starý
       // Ak je tu rozpracovaný chordline bez textu, je to sirota -> zahodíme ho
-      pendingChordLine = '';
+      pendingChordLines.length = 0;
       closeSection();
       pendingLabel = only;
       continue;
@@ -860,11 +860,15 @@ function songTextToHTML(text) {
       closeSection();
       openSection();
 
-      // If there is a pending chordline, put it on the SAME row as the marker label (e.g. "2").
+      // If there are pending chordlines, put the FIRST on the SAME row as the marker label (e.g. "2").
+      // Any additional chordlines render above the lyric text (without label).
       // Then render the lyric text on the next row (without a label).
-      if (pendingChordLine){
-        out.push(songLineHTML(withText.label, pendingChordLine, 'song-chordline'));
-        pendingChordLine = '';
+      if (pendingChordLines.length){
+        out.push(songLineHTML(withText.label, pendingChordLines[0], 'song-chordline'));
+        for (let k=1; k<pendingChordLines.length; k++){
+          out.push(songLineHTML('', pendingChordLines[k], 'song-chordline'));
+        }
+        pendingChordLines.length = 0;
         out.push(songLineHTML('', withText.text));
       } else {
         out.push(songLineHTML(withText.label, withText.text));
@@ -878,13 +882,14 @@ function songTextToHTML(text) {
       out.push(songLineHTML('', `${pendingSpecial}: ${line.trim()}`, 'song-special-row'));
       out.push('</div>');
       pendingSpecial = '';
-      pendingChordLine = '';
+      pendingChordLines.length = 0;
       continue;
     }
 
-        // Chord-only line: buffer it and render above the next non-marker text line
+        // Chord-only line: buffer it and render above the next content line.
+    // If the section/song ends with chord-only lines, we will render them at the end.
     if (isChordOnlyLine(line)) {
-      pendingChordLine = line;
+      pendingChordLines.push(line);
       continue;
     }
 
@@ -893,11 +898,15 @@ function songTextToHTML(text) {
       closeSection();
       openSection();
 
-      // If there is a pending chordline, put it on the SAME row as the verse label.
+      // If there are pending chordlines, put the FIRST on the SAME row as the verse label.
+      // Any additional chordlines render above the lyric line (without label).
       // Then render the lyric text on the next row (without a label).
-      if (pendingChordLine){
-        out.push(songLineHTML(pendingLabel, pendingChordLine, 'song-chordline'));
-        pendingChordLine = '';
+      if (pendingChordLines.length){
+        out.push(songLineHTML(pendingLabel, pendingChordLines[0], 'song-chordline'));
+        for (let k=1; k<pendingChordLines.length; k++){
+          out.push(songLineHTML('', pendingChordLines[k], 'song-chordline'));
+        }
+        pendingChordLines.length = 0;
         out.push(songLineHTML('', line));
       } else {
         // No chordline -> render the lyric line with the label as usual
@@ -909,17 +918,31 @@ function songTextToHTML(text) {
       // pokračovanie aktuálneho bloku (ak existuje), inak voľný text
 
       if (sectionOpen){
-        if (pendingChordLine){ out.push(songLineHTML('', pendingChordLine, 'song-chordline')); pendingChordLine=''; }
+        if (pendingChordLines.length){ for (const cl of pendingChordLines) out.push(songLineHTML('', cl, 'song-chordline')); pendingChordLines.length = 0; }
         out.push(songLineHTML('', line));
       } else {
-        if (pendingChordLine){ out.push(songLineHTML('', pendingChordLine, 'song-chordline')); pendingChordLine=''; }
+        if (pendingChordLines.length){ for (const cl of pendingChordLines) out.push(songLineHTML('', cl, 'song-chordline')); pendingChordLines.length = 0; }
         out.push(songLineHTML('', line));
       }
     }
   }
 
-  // Ak ostal chordline bez nasledujúceho textu, nezobrazuj ho
-  pendingChordLine = '';
+  // If chord-only lines remain without following lyric (e.g., chord-only songs/verses), render them now.
+  if (pendingLabel && pendingChordLines.length){
+    closeSection();
+    openSection();
+    out.push(songLineHTML(pendingLabel, pendingChordLines[0], 'song-chordline'));
+    for (let k=1; k<pendingChordLines.length; k++){
+      out.push(songLineHTML('', pendingChordLines[k], 'song-chordline'));
+    }
+    pendingChordLines.length = 0;
+    pendingLabel = '';
+  }
+  if (pendingChordLines.length){
+    if (!sectionOpen) openSection();
+    for (const cl of pendingChordLines) out.push(songLineHTML('', cl, 'song-chordline'));
+    pendingChordLines.length = 0;
+  }
   closeSection();
   return out.join('');
 }
