@@ -732,6 +732,7 @@ function songTextToHTML(text) {
   const lines = String(text || '').split('\n');
   let pendingLabel = '';
   let pendingSpecial = '';
+  let pendingChordLine = '';
   let sectionOpen = false;
   // Buffer empty lines so we can drop them if they end up at the end of a section
   // (sloha/refren/bridge). This saves vertical space without removing spacing inside blocks.
@@ -827,6 +828,7 @@ function songTextToHTML(text) {
     if (withText) {
       closeSection();
       openSection();
+      if (pendingChordLine){ out.push(songLineHTML('', pendingChordLine, 'song-chordline')); pendingChordLine=''; }
       out.push(songLineHTML(withText.label, withText.text));
       continue;
     }
@@ -838,29 +840,34 @@ function songTextToHTML(text) {
       out.push(songLineHTML('', `${pendingSpecial}: ${line.trim()}`, 'song-special-row'));
       out.push('</div>');
       pendingSpecial = '';
+      pendingChordLine = '';
       continue;
     }
 
-    // Normal line: if we have a pending label, use it only for this first content line
+        // Chord-only line: buffer it and render above the next non-marker text line
+    if (isChordOnlyLine(line)) {
+      pendingChordLine = line;
+      continue;
+    }
+
+// Normal line: if we have a pending label, use it only for this first content line
     if (pendingLabel) {
-      // Ak je nasledujúci riadok iba akordový (chordline), neprišívaj label na akordy.
-      // Label nech sa použije až na prvý textový riadok v bloku.
-      const chordOnly = /\[[^\]]+\]/.test(line) && String(line).replace(/\[[^\]]+\]/g, '').trim() === '';
-      if (chordOnly) {
-        closeSection();
-        openSection();
-        out.push(songLineHTML('', line, 'song-chordline'));
-        continue;
-      }
       closeSection();
       openSection();
+      // If there is a pending chordline, render it ABOVE the first text line, but keep label for text.
+      if (pendingChordLine){
+        out.push(songLineHTML('', pendingChordLine, 'song-chordline'));
+        pendingChordLine = '';
+      }
       out.push(songLineHTML(pendingLabel, line));
       pendingLabel = '';
     } else {
       // pokračovanie aktuálneho bloku (ak existuje), inak voľný text
       if (sectionOpen){
+        if (pendingChordLine){ out.push(songLineHTML('', pendingChordLine, 'song-chordline')); pendingChordLine=''; }
         out.push(songLineHTML('', line));
       } else {
+        if (pendingChordLine){ out.push(songLineHTML('', pendingChordLine, 'song-chordline')); pendingChordLine=''; }
         out.push(songLineHTML('', line));
       }
     }
@@ -885,8 +892,8 @@ function songTextToHTML(text) {
 const LS_CHORD_TEMPLATE_ON = 'chord_template_on';
 function chordTemplateEnabled(){
   const v = localStorage.getItem(LS_CHORD_TEMPLATE_ON);
-  // default: OFF (zapína sa cez tlačidlo)
-  return v == null ? false : (v === '1');
+  // default: ON (ak používateľ nevypne)
+  return v == null ? true : (v === '1');
 }
 
 function setChordTemplateEnabled(on){
@@ -905,7 +912,7 @@ function updateChordTemplateUI(){
   if (!btn || !lab) return;
   const on = chordTemplateEnabled();
   btn.classList.toggle('active', on);
-  lab.textContent = on ? 'Šablóna: ON' : 'Šablóna: OFF';
+  lab.textContent = on ? 'ON' : 'OFF';
 }
 
 
