@@ -639,6 +639,73 @@ body.present #presentControls{ display:flex; }
 }
 .chip-btn:active{ transform:scale(0.99); }
 
+/* Secondary button (used under contact textarea) */
+.secondary-btn{
+  background:#0f0f0f;
+  border:1px solid #2b2b2b;
+  color:#fff;
+  border-radius:12px;
+  padding:10px 12px;
+  font-weight:900;
+  cursor:pointer;
+}
+.secondary-btn:active{ transform:scale(0.99); }
+
+/* Edit-song suggestion modal */
+.chord-panel{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+.custom-chord{
+  flex:1;
+  min-width:160px;
+  background:#121212;
+  border:1px solid #2b2b2b;
+  color:#fff;
+  border-radius:12px;
+  padding:10px 12px;
+}
+.edit-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+}
+@media (max-width: 700px){
+  .edit-grid{ grid-template-columns: 1fr; }
+}
+.edit-ta{
+  width:100%;
+  min-height:240px;
+  max-height:420px;
+  resize:vertical;
+  background:#121212;
+  border:1px solid #2b2b2b;
+  color:#fff;
+  border-radius:12px;
+  padding:10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:13px;
+  line-height:1.35;
+}
+.edit-diff{
+  background:#121212;
+  border:1px solid #2b2b2b;
+  border-radius:12px;
+  padding:10px 12px;
+  max-height:200px;
+  overflow:auto;
+  white-space:pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:12px;
+}
+
+@media (max-width: 760px){
+  .edit-grid{ grid-template-columns: 1fr; }
+  .edit-ta{ min-height:200px; }
+}
+
 /* History list scroll */
 #history-section{
   max-height: 320px;
