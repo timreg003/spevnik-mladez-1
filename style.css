@@ -229,6 +229,64 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   justify-content:center;
 }
 
+/* ===== PREZENTAČNÝ REŽIM ===== */
+body.present{
+  background:#000;
+}
+body.present #song-detail{
+  padding-top: 6px;
+}
+body.present .controls,
+body.present .back-btn,
+body.present #error-report-container{
+  display:none !important;
+}
+body.present #song-content{
+  background:#000;
+  border:1px solid rgba(255,255,255,.12);
+  padding: 24px 16px 90px;
+  border-radius: 16px;
+}
+body.present #render-title{
+  text-align:center;
+  font-size: 28px;
+  margin: 10px 0 10px;
+}
+/* šípka vpravo dole nech je stále viditeľná */
+body.present #scroll-to-top{ display:flex !important; }
+
+/* Panel pre auto-posun v prezentácii */
+#presentControls{
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 18px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(6px);
+  z-index: 100001;
+}
+body.present #presentControls{ display:flex; }
+
+#presentControls button{
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.22);
+}
+#presentControls .psSpeed{
+  font-weight: 900;
+  color: #00bfff;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
 .back-btn{
   background:none; color:#00bfff; font-size:16px; border:none;
   cursor:pointer; margin-bottom:15px; width:100%;
@@ -240,13 +298,38 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
   padding:25px 15px;
   border-radius:12px;
   /* menšie medzery medzi riadkami (pôvodne bolo príliš veľké) */
-  line-height:1.8;
-  white-space:pre-wrap;
+  line-height:1.55;
   margin-top:10px;
   font-size:17px;
-  /* text nech ostane vizuálne "na stred", značky (1., R:, B:, ...) sú vľavo cez .song-marker */
-  text-align:center;
   color:#fff;
+}
+
+/* Riadky piesne: label vľavo, text centrovaný (v 1 riadku) */
+#song-content .song-line{
+  display:grid;
+  grid-template-columns: 3.6rem 1fr;
+  column-gap: .6rem;
+  align-items:baseline;
+  padding: 1px 0;
+}
+#song-content .song-label{
+  text-align:left;
+  color:#00bfff;
+  font-weight:900;
+  white-space:nowrap;
+  opacity:.95;
+}
+#song-content .song-line-text{
+  text-align:center;
+  overflow-wrap:anywhere;
+}
+#song-content .song-blank{
+  min-height: .85em;
+}
+#song-content .song-special-row .song-line-text,
+#song-content .song-transpose-row .song-line-text{
+  color:#00bfff;
+  font-weight:900;
 }
 .chord{ color:#00bfff; font-weight:bold; background:#252525; padding:1px 4px; border-radius:4px; position:relative; top:-0.12em; }
 .tiny-label{ font-size:10px; color:#00bfff; margin-top:4px; font-weight:bold; }
@@ -439,6 +522,26 @@ button{ background:#1e1e1e; border:none; color:#fff; padding:10px 14px; cursor:p
 .form-preview .mk{ color:#00bfff; font-weight:900; }
 
 .form-order{ display:flex; flex-wrap:wrap; gap:8px; }
+
+/* História piesne v editore poradia */
+.form-history{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:180px;
+  overflow:auto;
+  -webkit-overflow-scrolling: touch;
+}
+.form-history-item{
+  background:#121212;
+  border:1px solid #2b2b2b;
+  border-radius:12px;
+  padding:10px 12px;
+  cursor:pointer;
+}
+.form-history-item .fh-title{ font-weight:900; color:#fff; margin-bottom:4px; }
+.form-history-item .fh-order{ font-size:12px; opacity:0.85; overflow-wrap:anywhere; }
+.form-history-empty{ opacity:0.75; font-size:13px; }
 .chip{
   background:#222;
   color:#fff;
