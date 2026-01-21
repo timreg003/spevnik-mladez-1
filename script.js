@@ -733,6 +733,7 @@ function songLineHTML(label, text, extraClass) {
 }
 
 function songTextToHTML(text) {
+  const is999 = (typeof currentSong !== 'undefined') && currentSong && String(currentSong.displayId || currentSong.id || '') === '999';
   const lines = String(text || '').split('\n');
   let pendingLabel = '';
   let pendingSpecial = '';
@@ -760,9 +761,14 @@ function songTextToHTML(text) {
     const line = String(raw ?? '');
     const trimmed = line.trim();
 
-    // Blank line (buffer; we'll decide later whether to render it)
+    // Blank line
     if (!trimmed) {
-      pendingBlanks++;
+      if (is999) {
+        out.push('<div class="song-line song-blank"><span class="song-label"></span><span class="song-line-text"></span></div>');
+      } else {
+        // Buffer empty lines so we can drop them if they end up at the end of a section
+        pendingBlanks++;
+      }
       continue;
     }
 
@@ -893,8 +899,14 @@ function songTextToHTML(text) {
     }
   }
 
-  // Ak ostal chordline bez nasledujúceho textu, nezobrazuj ho
-  pendingChordLine = '';
+  // Ak ostal chordline bez nasledujúceho textu
+  if (pendingChordLine){
+    if (is999){
+      openSection();
+      out.push(songLineHTML('', pendingChordLine, 'song-chordline'));
+    }
+    pendingChordLine = '';
+  }
   closeSection();
   return out.join('');
 }
@@ -1190,22 +1202,25 @@ function applyChordTemplateOverlay(text){
 
 function renderSong() {
   if (!currentSong) return;
+  const is999 = String(currentSong.displayId || currentSong.id || '') === '999';
   let text = (currentListSource === 'dnes' && currentDnesOrder)
     ? buildOrderedSongText(currentSong, currentDnesOrder)
     : currentSong.origText;
 
-  // Akordová šablóna zo slohy 1 (overlay) + doplnenie 2. polovice prvého refrenu (iba v rámci toho refrenu)
-  text = applyChordTemplateOverlay(text);
+  if (!is999) {
+    // Akordová šablóna zo slohy 1 (overlay) + doplnenie 2. polovice prvého refrenu (iba v rámci toho refrenu)
+    text = applyChordTemplateOverlay(text);
 
-  // Zredukuj extrémne medzery (najmä po značkách 1., R:, B:, Refren, Bridge, Predohra..., Transpozícia...)
-  // - odstráni prázdne riadky hneď po značke
-  // - zredukuje viac prázdnych riadkov za sebou
-  text = String(text || '').replace(/^(\d+\.|R\d*:|B\d*:|Refren:?|Bridge:?|Predohra.*|Medzihra.*|Dohra.*|Transpozícia:.*)\s*\n\s*\n+/gmi, '$1\n');
-  text = text.replace(/\n\s*\n\s*\n+/g, '\n\n');
+    // Zredukuj extrémne medzery (najmä po značkách 1., R:, B:, Refren, Bridge, Predohra..., Transpozícia...)
+    // - odstráni prázdne riadky hneď po značke
+    // - zredukuje viac prázdnych riadkov za sebou
+    text = String(text || '').replace(/^(\d+\.|R\d*:|B\d*:|Refren:?|Bridge:?|Predohra.*|Medzihra.*|Dohra.*|Transpozícia:.*)\s*\n\s*\n+/gmi, '$1\n');
+    text = text.replace(/\n\s*\n\s*\n+/g, '\n\n');
 
-  // Pri poradí (editor "forma") nech sú bloky úplne bez medzier
-  if (currentListSource === 'dnes' && currentDnesOrder) {
-    text = text.replace(/\n\s*\n+/g, '\n');
+    // Pri poradí (editor "forma") nech sú bloky úplne bez medzier
+    if (currentListSource === 'dnes' && currentDnesOrder) {
+      text = text.replace(/\n\s*\n+/g, '\n');
+    }
   }
 
   // Transpose chords first
@@ -1222,7 +1237,9 @@ function renderSong() {
   if (!text || !text.trim()) text = currentSong.origText || '';
 
   // +1 / -2 (samostatný riadok) -> Transpozícia: +1
-  text = text.replace(/^\s*([+-]\d+)\s*\n/, 'Transpozícia: $1\n');
+  if (!is999) {
+    text = text.replace(/^\s*([+-]\d+)\s*\n/, 'Transpozícia: $1\n');
+  }
 
   const el = document.getElementById('song-content');
   el.innerHTML = songTextToHTML(text);
@@ -1231,6 +1248,9 @@ function renderSong() {
   // sync presentation overlay
   updatePresentationUI();
   updateChordTemplateUI();
+  // pre 999 schovaj ovládanie šablóny (nikdy neaplikovať)
+  const cg = document.getElementById('tmpl-btn')?.closest('.control-group');
+  if (cg) cg.style.display = is999 ? 'none' : '';
 }
 
 function transposeChord(c, step) {
@@ -2652,6 +2672,33 @@ async function submitErrorForm(event) {
   const status = document.getElementById("form-status");
   const btn = document.getElementById("submit-btn");
 
+  // Custom validation:
+  // - meno is always required (HTML required handles it too)
+  // - user must send either a message (textarea) OR an edit suggestion payload
+  try {
+    const nameEl = form.querySelector('input[name="meno"]');
+    const msgEl = form.querySelector('textarea[name="chyba"]');
+    const fType = document.getElementById('fType');
+    const fProp = document.getElementById('fProposedText');
+    const nameVal = (nameEl?.value || '').trim();
+    const msgVal = (msgEl?.value || '').trim();
+    const typeVal = (fType?.value || '').trim();
+    const propVal = (fProp?.value || '').trim();
+
+    if (!nameVal) {
+      showToast('Vyplň meno.', false);
+      if (nameEl) nameEl.focus();
+      return;
+    }
+
+    const isEdit = typeVal === 'navrh_upravy_piesne' && propVal.length > 0;
+    if (!msgVal && !isEdit) {
+      showToast('Napíš správu alebo použi „Upraviť pieseň“.', false);
+      if (msgEl) msgEl.focus();
+      return;
+    }
+  } catch(e) {}
+
   status.style.display = "block";
   status.style.color = "#00ff00";
   status.innerText = "Odosielam...";
@@ -2737,6 +2784,11 @@ function diffToHtml(diffText){
 
 function showEditSongModal(){
   if (!currentSong) { showToast('Najprv otvor pieseň.', false); return; }
+  // 999 songs are protected: never propose edits from here
+  if (String(currentSong.displayId || currentSong.id || '') === '999') {
+    showToast('Táto pieseň (999) sa neupravuje.', false);
+    return;
+  }
   const overlay = document.getElementById('edit-song-modal');
   const meta = document.getElementById('edit-song-meta');
   const taO = document.getElementById('edit-original');
@@ -2760,13 +2812,102 @@ function closeEditSongModal(){
   if (overlay) overlay.style.display = 'none';
 }
 
-function updateEditSongDiff(){
+function _extractChordTokens(line){
+  return (String(line||'').match(/\[[^\]]+\]/g) || []);
+}
+
+function _countMap(arr){
+  const m = new Map();
+  for (const x of arr){ m.set(x, (m.get(x)||0) + 1); }
+  return m;
+}
+
+function buildProposedHighlightHtml(originalText, proposedText){
+  const oLines = String(originalText||'').replace(/\r/g,'').split('\n');
+  const pLines = String(proposedText||'').replace(/\r/g,'').split('\n');
+  const out = [];
+
+  for (let i=0; i<pLines.length; i++){
+    const o = oLines[i] ?? '';
+    const p = pLines[i] ?? '';
+    const lineChanged = o !== p;
+
+    const oCh = _extractChordTokens(o);
+    const pCh = _extractChordTokens(p);
+    const oMap = _countMap(oCh);
+    const usedFromOrig = new Map();
+
+    // count removed chords (multiset diff)
+    const pMap = _countMap(pCh);
+    let removedCount = 0;
+    for (const [k, ov] of oMap.entries()){
+      const pv = pMap.get(k) || 0;
+      if (ov > pv) removedCount += (ov - pv);
+    }
+
+    // rebuild the proposed line with added chords highlighted
+    let htmlLine = '';
+    const parts = String(p).split(/(\[[^\]]+\])/g);
+    for (const part of parts){
+      if (!part) continue;
+      if (part.startsWith('[') && part.endsWith(']')){
+        const k = part;
+        const have = oMap.get(k) || 0;
+        const used = usedFromOrig.get(k) || 0;
+        const isAdded = used >= have;
+        usedFromOrig.set(k, used + 1);
+        htmlLine += isAdded
+          ? `<span class="hl-chord-add">${escapeHtml(part)}</span>`
+          : escapeHtml(part);
+      } else {
+        htmlLine += escapeHtml(part);
+      }
+    }
+
+    if (htmlLine === '') htmlLine = '&nbsp;';
+    const cls = lineChanged ? 'hl-changed' : 'hl-same';
+    let rendered = `<span class="${cls}">${htmlLine}</span>`;
+
+    if (removedCount > 0) {
+      for (let j=0; j<removedCount; j++) rendered += `<span class="hl-delbox"></span>`;
+    }
+    out.push(rendered);
+  }
+
+  // preserve trailing newline so overlay height matches textarea
+  return out.join('\n');
+}
+
+function updateEditSongVisuals(){
   const taO = document.getElementById('edit-original');
   const taP = document.getElementById('edit-proposed');
   const diffEl = document.getElementById('edit-diff');
-  if (!taO || !taP || !diffEl) return;
+  const hl = document.getElementById('edit-highlight');
+  if (!taO || !taP) return;
+
   const d = simpleLineDiff(taO.value, taP.value);
-  diffEl.textContent = d || '(bez zmien)';
+  if (diffEl) {
+    // show diff with red highlighting
+    const lines = String(d || '').split('\n');
+    diffEl.innerHTML = lines.length && d
+      ? lines.map(line => {
+          if (line.startsWith('- ')) return `<span style="color:#ff4444;text-decoration:line-through">${escapeHtml(line)}</span>`;
+          if (line.startsWith('+ ')) return `<span style="color:#ff4444">${escapeHtml(line)}</span>`;
+          return escapeHtml(line);
+        }).join('\n')
+      : '(bez zmien)';
+  }
+  if (hl) {
+    hl.innerHTML = buildProposedHighlightHtml(taO.value, taP.value);
+    // keep scroll aligned
+    hl.scrollTop = taP.scrollTop;
+    hl.scrollLeft = taP.scrollLeft;
+  }
+}
+
+// Back-compat for older calls
+function updateEditSongDiff(){
+  updateEditSongVisuals();
 }
 
 function sendEditSongSuggestion(){
@@ -2780,6 +2921,16 @@ function sendEditSongSuggestion(){
   const originalText = String(taO.value || '');
   const diffText = simpleLineDiff(originalText, proposedText);
   const diffHtml = diffToHtml(diffText);
+  const highlightHtml = buildProposedHighlightHtml(originalText, proposedText);
+  const combinedHtml = `
+    <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:13px;">
+      <div style="font-weight:800; margin-bottom:6px;">Zmeny (diff)</div>
+      ${diffHtml || ''}
+      <hr style="border:0;border-top:1px solid #2b2b2b; margin:12px 0;"/>
+      <div style="font-weight:800; margin-bottom:6px;">Návrh s vyznačením</div>
+      <div style="white-space:pre-wrap;">${highlightHtml || ''}</div>
+    </div>
+  `;
 
   const MAX = 25000;
   if (proposedText.length > MAX) {
@@ -2802,7 +2953,7 @@ function sendEditSongSuggestion(){
   if (fType) fType.value = 'navrh_upravy_piesne';
   if (fProp) fProp.value = proposedText;
   if (fDiff) fDiff.value = diffText;
-  if (fDiffH) fDiffH.value = diffHtml;
+  if (fDiffH) fDiffH.value = combinedHtml;
 
   // subject for email
   const subj = document.getElementById('error-subject');
@@ -2901,8 +3052,65 @@ document.addEventListener('DOMContentLoaded', () => {
       window.__editDiffTimer = setTimeout(updateEditSongDiff, 120);
     });
 
+    // keep overlay highlight aligned on scroll
+    if (taP) taP.addEventListener('scroll', () => {
+      const hl = document.getElementById('edit-highlight');
+      if (hl) { hl.scrollTop = taP.scrollTop; hl.scrollLeft = taP.scrollLeft; }
+    }, { passive:true });
+
     const panel = document.getElementById('chord-panel');
     if (panel && taP) {
+      // build full chord palette: majors/minors with # plus 7 variants
+      (function buildChordPalette(){
+        const majors = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        const minors = ['Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm'];
+        const maj7 = majors.map(x => `${x}7`);
+        const min7 = minors.map(x => `${x}7`);
+
+        function btn(ch, cls){
+          const sharp = ch.includes('#') ? 'chordSharp' : '';
+          const seven = ch.endsWith('7') ? 'chord7' : '';
+          const extra = [cls, sharp, seven].filter(Boolean).join(' ');
+          return `<button type="button" class="chip-btn ${extra}" data-chord="[${escapeHtml(ch)}]">${escapeHtml(ch)}</button>`;
+        }
+
+        const html = [];
+
+        // Dur
+        html.push('<div class="chord-section">');
+        html.push('<div class="chord-section-title">Dur</div>');
+        html.push(majors.map(c => btn(c, 'dur')).join(''));
+        html.push('</div>');
+
+        // Mol
+        html.push('<div class="chord-section">');
+        html.push('<div class="chord-section-title">Mol</div>');
+        html.push(minors.map(c => btn(c, 'mol')).join(''));
+        html.push('</div>');
+
+        // Dur7
+        html.push('<div class="chord-section">');
+        html.push('<div class="chord-section-title">Dur7</div>');
+        html.push(maj7.map(c => btn(c, 'dur7')).join(''));
+        html.push('</div>');
+
+        // Mol7
+        html.push('<div class="chord-section">');
+        html.push('<div class="chord-section-title">Mol7</div>');
+        html.push(min7.map(c => btn(c, 'mol7')).join(''));
+        html.push('</div>');
+
+        // Custom chord + tools
+        html.push('<div class="chord-section">');
+        html.push('<div class="chord-section-title">Vlastný akord</div>');
+        html.push('<input id="custom-chord" class="custom-chord" type="text" placeholder="napr. F#7 / G/B" />');
+        html.push('<button type="button" class="chip-btn" id="custom-chord-insert">Vložiť</button>');
+        html.push('<button type="button" class="chip-btn" id="delete-nearest-chord">⌫ akord</button>');
+        html.push('</div>');
+
+        panel.innerHTML = html.join('');
+      })();
+
       panel.addEventListener('click', (e) => {
         const t = e.target;
         if (!t) return;
