@@ -304,14 +304,32 @@ renderPlaylistsUI(true);
 
 /* ===== XML LOAD ===== */
 async function parseXML() {
+  // iOS: neblokuj štart čakaním na sieť. Najprv ukáž cache (ak existuje), potom v pozadí obnov.
+  const saved = localStorage.getItem('offline_spevnik');
+  if (saved && saved.trim()) {
+    // odlož na ďalší tick, aby sa UI stihlo vykresliť
+    setTimeout(() => { try { processXML(saved); } catch(e) {} }, 0);
+  }
+
   try {
     const data = await jsonpRequest(SCRIPT_URL);
     const xmlText = (data && data.xml != null) ? String(data.xml) : "";
-    localStorage.setItem('offline_spevnik', xmlText);
-    processXML(xmlText);
+    if (xmlText && xmlText.trim()) {
+      const prev = saved || "";
+      if (xmlText !== prev) {
+        localStorage.setItem('offline_spevnik', xmlText);
+        // Ak sme ešte nič nezobrazili, alebo nie sme v detaile, prepočítaj.
+        const inDetail = (document.getElementById('song-detail')?.style.display === 'block');
+        if (!saved || !inDetail) {
+          processXML(xmlText);
+        }
+      }
+    }
   } catch (e) {
-    const saved = localStorage.getItem('offline_spevnik');
-    if (saved) processXML(saved);
+    // ak nebola cache, nech aspoň ostane loading
+    if (!saved) {
+      // nič
+    }
   }
 }
 function processXML(xmlText) {
@@ -1505,6 +1523,9 @@ function renderDnesSelected() {
         <button class="small-del" onclick="removeDnesAt(${idx})">X</button>
       </div>`;
   }).join('');
+
+  // Mobile touch reorder
+  enableTouchReorder(box, 'dnes');
 }
 function removeDnesAt(idx){
   dnesSelectedIds.splice(idx,1);
@@ -1844,6 +1865,8 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
         <button class="small-del" title="Vymazať" onclick="event.stopPropagation(); deletePlaylist('${encodeURIComponent(name)}')">X</button>
       </div>`;
   }).join('');
+
+  if (isAdmin) enableTouchReorder(sect, 'plist');
 }
 
 
@@ -1994,6 +2017,8 @@ function renderPlaylistSelection(){
         <button class="small-del" onclick="removeFromPlaylistSelection(${idx})">X</button>
       </div>`;
   }).join('');
+
+  enableTouchReorder(box, 'plsel');
 }
 
 function removeFromPlaylistSelection(idx){
@@ -2160,13 +2185,18 @@ function onDrop(ev, ctx) {
   const to = parseInt(ev.currentTarget.getAttribute("data-idx"), 10);
   if (isNaN(from) || isNaN(to) || from === to) return;
 
+  applyReorder(ctx, from, to);
+}
+function moveInArray(arr, from, to){ const item = arr.splice(from,1)[0]; arr.splice(to,0,item); }
+
+// Jedno miesto, ktoré rieši presun poradia pre drag&drop aj touch.
+function applyReorder(ctx, from, to) {
   if (ctx === 'dnes') {
     moveInArray(dnesSelectedIds, from, to);
     moveInArray(dnesItems, from, to);
     renderDnesSelected();
     const __s = document.getElementById('dnes-search');
     if (__s && __s.value) { __s.value = ''; renderDnesAvailable(); }
-
   }
   else if (ctx === 'plist') {
     moveInArray(playlistOrder, from, to);
@@ -2182,10 +2212,78 @@ function onDrop(ev, ctx) {
     renderPlaylistSelection();
     const __ps = document.getElementById('playlist-search');
     if (__ps && __ps.value) { __ps.value = ''; renderPlaylistAvailable(); }
-
   }
 }
-function moveInArray(arr, from, to){ const item = arr.splice(from,1)[0]; arr.splice(to,0,item); }
+
+// Touch/pointer reordering pre mobile (iOS/Android) – HTML5 drag&drop tam býva nespoľahlivé.
+function enableTouchReorder(container, ctx) {
+  if (!container || container.__touchReorderEnabled) return;
+  container.__touchReorderEnabled = true;
+
+  let draggingItem = null;
+  let fromIdx = -1;
+  let lastX = 0, lastY = 0;
+
+  function getPoint(ev) {
+    if (ev.touches && ev.touches[0]) return { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    if (ev.changedTouches && ev.changedTouches[0]) return { x: ev.changedTouches[0].clientX, y: ev.changedTouches[0].clientY };
+    return { x: ev.clientX, y: ev.clientY };
+  }
+
+  function start(ev) {
+    const handle = ev.target.closest('.drag-handle');
+    if (!handle) return;
+    const item = handle.closest('.draggable-item');
+    if (!item || !container.contains(item)) return;
+
+    draggingItem = item;
+    fromIdx = parseInt(item.getAttribute('data-idx'), 10);
+    if (isNaN(fromIdx)) {
+      const items = Array.from(container.querySelectorAll('.draggable-item'));
+      fromIdx = items.indexOf(item);
+    }
+    const p = getPoint(ev);
+    lastX = p.x; lastY = p.y;
+    draggingItem.classList.add('touch-dragging');
+    ev.preventDefault();
+
+    window.addEventListener('pointermove', move, { passive:false });
+    window.addEventListener('pointerup', end, { passive:false, once:true });
+    window.addEventListener('touchmove', move, { passive:false });
+    window.addEventListener('touchend', end, { passive:false, once:true });
+  }
+
+  function move(ev) {
+    if (!draggingItem) return;
+    const p = getPoint(ev);
+    lastX = p.x; lastY = p.y;
+    ev.preventDefault();
+  }
+
+  function end(ev) {
+    if (!draggingItem) return;
+    ev.preventDefault();
+    const el = document.elementFromPoint(lastX, lastY);
+    const over = el ? el.closest('.draggable-item') : null;
+    const items = Array.from(container.querySelectorAll('.draggable-item'));
+    const toIdx = over && container.contains(over) ? items.indexOf(over) : -1;
+    const f = fromIdx;
+    cleanup();
+    if (f >= 0 && toIdx >= 0 && f !== toIdx) applyReorder(ctx, f, toIdx);
+  }
+
+  function cleanup() {
+    if (draggingItem) draggingItem.classList.remove('touch-dragging');
+    draggingItem = null;
+    fromIdx = -1;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('touchmove', move);
+  }
+
+  // pointerdown funguje na novších iOS aj Android; touchstart je fallback.
+  container.addEventListener('pointerdown', start, { passive:false });
+  container.addEventListener('touchstart', start, { passive:false });
+}
 
 /* Update app (offline blocked) */
 async function hardResetApp() {
