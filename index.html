@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>Mládežnícky spevník NIŽNÁ</title>
 
-  <link rel="manifest" href="manifest.json?v=14">
+  <link rel="manifest" href="manifest.json?v=15">
   <meta name="theme-color" content="#00bfff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Spevník">
-  <link rel="apple-touch-icon" href="icon.png?v=14">
-  <link rel="icon" type="image/png" href="icon.png?v=14">
+  <link rel="apple-touch-icon" href="icon.png?v=15">
+  <link rel="icon" type="image/png" href="icon.png?v=15">
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css?v=19"/>
+  <link rel="stylesheet" href="style.css?v=20"/>
 </head>
 
 <body>
@@ -209,8 +209,8 @@
         <input type="hidden" name="diffText" id="fDiffText" value="">
         <input type="hidden" name="diffHtml" id="fDiffHtml" value="">
         <input type="text" name="meno" placeholder="Tvoje meno" required>
-        <textarea name="chyba" placeholder="Napr. chybný akord, preklep v texte..." required></textarea>
-        <button type="button" id="btnEditSong" class="secondary-btn">Upraviť pieseň</button>
+        <textarea name="chyba" placeholder="Napíš správu… alebo použi „Upraviť pieseň“"></textarea>
+        <button type="button" id="btnEditSong" class="secondary-btn blue">Upraviť pieseň</button>
         <button type="submit" id="submit-btn">ODOSLAŤ</button>
       </form>
 
@@ -240,7 +240,7 @@
   <button id="psExit" onclick="exitPresentationMode()" aria-label="Ukončiť"><i class="fas fa-xmark"></i></button>
 </div>
 
-<script src="script.js?v=23"></script>
+<script src="script.js?v=24"></script>
 
   <!-- FORM EDITOR MODAL -->
   <div id="form-modal" class="modal-overlay" style="display:none;">
@@ -304,27 +304,7 @@
 
         <div class="modal-block">
           <div class="modal-label">Panel akordov</div>
-          <div id="chord-panel" class="chord-panel">
-            <button type="button" class="chip-btn" data-chord="[C]">C</button>
-            <button type="button" class="chip-btn" data-chord="[D]">D</button>
-            <button type="button" class="chip-btn" data-chord="[E]">E</button>
-            <button type="button" class="chip-btn" data-chord="[F]">F</button>
-            <button type="button" class="chip-btn" data-chord="[G]">G</button>
-            <button type="button" class="chip-btn" data-chord="[A]">A</button>
-            <button type="button" class="chip-btn" data-chord="[B]">B</button>
-
-            <button type="button" class="chip-btn" data-chord="[Am]">Am</button>
-            <button type="button" class="chip-btn" data-chord="[Bm]">Bm</button>
-            <button type="button" class="chip-btn" data-chord="[Cm]">Cm</button>
-            <button type="button" class="chip-btn" data-chord="[Dm]">Dm</button>
-            <button type="button" class="chip-btn" data-chord="[Em]">Em</button>
-            <button type="button" class="chip-btn" data-chord="[F#m]">F#m</button>
-            <button type="button" class="chip-btn" data-chord="[Gm]">Gm</button>
-
-            <input id="custom-chord" class="custom-chord" type="text" placeholder="napr. F#7 / G/B" />
-            <button type="button" class="chip-btn" id="custom-chord-insert">Vložiť</button>
-            <button type="button" class="chip-btn" id="delete-nearest-chord">⌫ akord</button>
-          </div>
+          <div id="chord-panel" class="chord-panel"></div>
           <div class="modal-hint">Klikni na akord a vloží sa tam, kde práve píšeš vpravo.</div>
         </div>
 
@@ -332,7 +312,10 @@
           <div class="modal-label">Originál vs. návrh</div>
           <div class="edit-grid">
             <textarea id="edit-original" class="edit-ta" readonly></textarea>
-            <textarea id="edit-proposed" class="edit-ta" placeholder="Tu uprav text piesne..."></textarea>
+            <div class="edit-proposed-wrap">
+              <pre id="edit-highlight" class="edit-highlight" aria-hidden="true"></pre>
+              <textarea id="edit-proposed" class="edit-ta edit-ta-overlay" placeholder="Tu uprav text piesne..."></textarea>
+            </div>
           </div>
           <div class="modal-hint">Originál je len na čítanie. Návrh (vpravo) sa odošle.</div>
         </div>
@@ -340,7 +323,7 @@
         <div class="modal-block">
           <div class="modal-label">Zmeny</div>
           <pre id="edit-diff" class="edit-diff"></pre>
-          <div class="modal-hint">Zobrazuje sa jednoduchý prehľad zmenených riadkov (čo pribudlo + a čo zmizlo -).</div>
+          <div class="modal-hint">Zobrazuje sa prehľad zmenených riadkov. Zmeny sú zvýraznené červenou.</div>
         </div>
       </div>
     </div>
