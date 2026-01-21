@@ -651,12 +651,56 @@ body.present #presentControls{ display:flex; }
 }
 .secondary-btn:active{ transform:scale(0.99); }
 
+/* Blue variant for "Upraviť pieseň" */
+.secondary-btn.blue{
+  background:#00bfff;
+  border:1px solid #00bfff;
+  color:#001018;
+}
+
 /* Edit-song suggestion modal */
 .chord-panel{
   display:flex;
   flex-wrap:wrap;
   gap:8px;
   align-items:center;
+}
+
+.chord-section-title{
+  width:100%;
+  margin-top:4px;
+  color:#00bfff;
+  font-weight:900;
+  opacity:0.95;
+}
+
+.chord-panel .chip-btn{
+  padding:8px 10px;
+  border-radius:10px;
+}
+
+.chord-panel .chip-btn.chord7{
+  background:rgba(0,191,255,0.18);
+  color:#eaffff;
+}
+
+.chord-panel .chip-btn.chordSharp{
+  background:rgba(255,255,255,0.08);
+}
+
+.chord-panel .chord-section{
+  width:100%;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+.chord-panel .chord-section-title{
+  width:100%;
+  font-weight:900;
+  color:#00bfff;
+  opacity:.95;
+  margin:6px 0 2px;
 }
 .custom-chord{
   flex:1;
@@ -689,6 +733,39 @@ body.present #presentControls{ display:flex; }
   font-size:13px;
   line-height:1.35;
 }
+
+/* Overlay highlight for proposed textarea (shows changes in red) */
+.edit-proposed-wrap{
+  position:relative;
+  width:100%;
+}
+.edit-highlight{
+  position:absolute;
+  inset:0;
+  margin:0;
+  pointer-events:none;
+  overflow:auto;
+  white-space:pre-wrap;
+  word-break:break-word;
+  background:#121212;
+  border:1px solid #2b2b2b;
+  border-radius:12px;
+  padding:10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:13px;
+  line-height:1.35;
+  color:#fff;
+}
+.edit-ta-overlay{
+  position:relative;
+  background:transparent;
+  color:transparent;         /* text drawn by highlight layer */
+  caret-color:#fff;
+}
+.edit-highlight .hl-same{ color:#ffffff; }
+.edit-highlight .hl-changed{ color:#ff4444; }
+.edit-highlight .hl-chord-add{ color:#ff4444; font-weight:900; }
+.edit-highlight .hl-delbox{ display:inline-block; width:10px; height:10px; background:#ff4444; border-radius:2px; margin-left:6px; vertical-align:middle; }
 .edit-diff{
   background:#121212;
   border:1px solid #2b2b2b;
