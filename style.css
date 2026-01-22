@@ -612,6 +612,56 @@ body.present #presentControls{ display:flex; }
   padding:10px 12px;
   cursor:pointer;
 }
+
+/* Diagnostika */
+.diag-summary{
+  background:#121212;
+  border:1px solid #2b2b2b;
+  border-radius:12px;
+  padding:10px;
+  font-size:14px;
+  line-height:1.35;
+}
+.diag-text{
+  width:100%;
+  min-height:240px;
+  resize:vertical;
+  border-radius:12px;
+  border:1px solid #2b2b2b;
+  background:#0b0b0b;
+  color:#fff;
+  padding:10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:13px;
+  line-height:1.35;
+}
+
+/* Bezpečný režim */
+.safe-mode-box{
+  background:#101010;
+  border:1px solid #2b2b2b;
+  border-radius:14px;
+  padding:12px;
+}
+.safe-title{
+  font-weight:900;
+  color:#00bfff;
+  margin-bottom:6px;
+}
+.safe-sub{
+  opacity:0.85;
+  font-size:13px;
+  margin-bottom:10px;
+}
+.safe-pre{
+  white-space:pre-wrap;
+  word-break:break-word;
+  background:#0b0b0b;
+  border:1px solid #222;
+  border-radius:12px;
+  padding:10px;
+  overflow:auto;
+}
 .form-history-item .fh-title{ font-weight:900; color:#fff; margin-bottom:4px; }
 .form-history-item .fh-order{ font-size:12px; opacity:0.85; overflow-wrap:anywhere; }
 .form-history-empty{ opacity:0.75; font-size:13px; }
@@ -719,3 +769,4 @@ body.present #presentControls{ display:flex; }
 }
 
 #tmpl-btn.active{ background:#00bfff !important; color:black !important; }
+
