@@ -29,6 +29,15 @@
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDFJ_XoBEbg6KYe1oM8Wj9IAzkq4yqzMSkfApgcc3aFeD0-Pxgww/exec';
 
+// Build info (for diagnostics)
+const APP_BUILD = 'v22';
+const APP_CACHE_NAME = 'spevnik-v22';
+
+// Diagnostics state
+let lastXmlShownAt = 0;   // when we last rendered from cache/network
+let lastXmlSyncAt = 0;    // when we last successfully fetched from network
+let lastXmlSyncBytes = 0;
+
 /* ===== JSONP helper (bypasses CORS for Apps Script) ===== */
 function jsonpRequest(url){
   return new Promise((resolve, reject) => {
@@ -182,6 +191,14 @@ function closeFabMenu(){
 function openFabMenu(){
   const m = document.getElementById("fab-menu");
   if (!m) return;
+  // Enable/disable update button based on connectivity (diagnostics should work offline)
+  const ub = document.getElementById('fab-update-btn');
+  if (ub){
+    const online = navigator.onLine;
+    ub.disabled = !online;
+    if (!online) ub.classList.add('disabled');
+    else ub.classList.remove('disabled');
+  }
   m.style.display = "block";
   m.setAttribute("aria-hidden", "false");
 }
@@ -190,9 +207,8 @@ function toggleFabMenu(ev){
   if (ev) ev.stopPropagation();
 
   if (!navigator.onLine){
+    // don't block opening the menu (diagnostics still useful)
     showToast("Si offline – aktualizácia nie je dostupná.", false);
-    closeFabMenu();
-    return;
   }
 
   const m = document.getElementById("fab-menu");
@@ -208,6 +224,89 @@ document.addEventListener('click', (e) => {
   if (!fab) return;
   if (!fab.contains(e.target)) closeFabMenu();
 }, true);
+
+/* ===== DIAGNOSTIKA ===== */
+function fmtDateTime(ts){
+  if (!ts) return '-';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('sk-SK');
+  } catch(e){ return '-'; }
+}
+function buildDiagnosticsText(){
+  const online = navigator.onLine ? 'áno' : 'nie';
+  const src = localStorage.getItem('spevnik_last_source') || '-';
+  const shownAt = parseInt(localStorage.getItem('spevnik_last_shown_at')||'0',10) || 0;
+  const syncAt = parseInt(localStorage.getItem('spevnik_last_sync_at')||'0',10) || 0;
+  const syncBytes = parseInt(localStorage.getItem('spevnik_last_sync_bytes')||'0',10) || 0;
+  const songsCount = Array.isArray(songs) ? songs.length : 0;
+  const ua = navigator.userAgent || '';
+  const lines = [];
+  lines.push(`App: ${APP_BUILD}`);
+  lines.push(`Cache: ${APP_CACHE_NAME}`);
+  lines.push(`Online: ${online}`);
+  lines.push(`Posledné zobrazenie: ${fmtDateTime(shownAt)} (${src})`);
+  lines.push(`Posledná synchronizácia: ${fmtDateTime(syncAt)} (${syncBytes ? syncBytes + ' znakov' : '-'})`);
+  lines.push(`Počet piesní: ${songsCount}`);
+  lines.push(`Aktuálna pieseň: ${currentSong ? (currentSong.displayId + ' – ' + currentSong.title) : '-'}`);
+  lines.push(`Zdroj: ${SCRIPT_URL}`);
+  lines.push(`UA: ${ua}`);
+  return lines.join('\n');
+}
+function openDiagnostics(){
+  closeFabMenu();
+  const modal = document.getElementById('diag-modal');
+  if (!modal) return;
+  const txt = buildDiagnosticsText();
+  const ta = document.getElementById('diag-text');
+  if (ta) ta.value = txt;
+  const summary = document.getElementById('diag-summary');
+  if (summary){
+    const online = navigator.onLine;
+    const syncAt = parseInt(localStorage.getItem('spevnik_last_sync_at')||'0',10) || 0;
+    summary.innerHTML = `
+      <div><b>Verzia:</b> ${escapeHtml(APP_BUILD)} &nbsp; <b>Cache:</b> ${escapeHtml(APP_CACHE_NAME)}</div>
+      <div><b>Online:</b> ${online ? 'áno' : 'nie'} &nbsp; <b>Posledný sync:</b> ${escapeHtml(fmtDateTime(syncAt))}</div>
+      <div><b>Piesní:</b> ${Array.isArray(songs) ? songs.length : 0}</div>
+    `;
+  }
+  modal.style.display = 'flex';
+}
+function closeDiagnostics(){
+  const modal = document.getElementById('diag-modal');
+  if (modal) modal.style.display = 'none';
+}
+async function copyDiagnostics(){
+  const ta = document.getElementById('diag-text');
+  const txt = ta ? ta.value : buildDiagnosticsText();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(txt);
+    } else {
+      // fallback
+      const tmp = document.createElement('textarea');
+      tmp.value = txt;
+      tmp.style.position='fixed';
+      tmp.style.left='-9999px';
+      document.body.appendChild(tmp);
+      tmp.focus();
+      tmp.select();
+      document.execCommand('copy');
+      tmp.remove();
+    }
+    showToast('Diagnostika skopírovaná.', true);
+  } catch(e){
+    showToast('Nepodarilo sa skopírovať.', false);
+  }
+}
+
+// click on overlay closes
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('diag-modal');
+  if (!modal || modal.style.display !== 'flex') return;
+  if (e.target === modal) closeDiagnostics();
+});
 
 /* offline: close menu automatically */
 window.addEventListener('offline', () => closeFabMenu());
@@ -309,7 +408,7 @@ async function parseXML() {
   const saved = localStorage.getItem('offline_spevnik');
   if (saved && saved.trim()) {
     // odlož na ďalší tick, aby sa UI stihlo vykresliť
-    setTimeout(() => { try { processXML(saved); } catch(e) {} }, 0);
+    setTimeout(() => { try { processXML(saved, { source:'cache' }); } catch(e) {} }, 0);
   }
 
   try {
@@ -319,10 +418,16 @@ async function parseXML() {
       const prev = saved || "";
       if (xmlText !== prev) {
         localStorage.setItem('offline_spevnik', xmlText);
+        // diagnostics: remember when we successfully synced from network
+        try {
+          const now = Date.now();
+          localStorage.setItem('spevnik_last_sync_at', String(now));
+          localStorage.setItem('spevnik_last_sync_bytes', String(xmlText.length));
+        } catch(e) {}
         // Ak sme ešte nič nezobrazili, alebo nie sme v detaile, prepočítaj.
         const inDetail = (document.getElementById('song-detail')?.style.display === 'block');
         if (!saved || !inDetail) {
-          processXML(xmlText);
+          processXML(xmlText, { source:'network' });
         }
       }
     }
@@ -333,7 +438,22 @@ async function parseXML() {
     }
   }
 }
-function processXML(xmlText) {
+function processXML(xmlText, opts = null) {
+  // diagnostics
+  try {
+    lastXmlShownAt = Date.now();
+    localStorage.setItem('spevnik_last_shown_at', String(lastXmlShownAt));
+    const src = (opts && opts.source) ? String(opts.source) : '';
+    if (src) localStorage.setItem('spevnik_last_source', src);
+  } catch(e) {}
+
+  try {
+    const t1 = parseInt(localStorage.getItem('spevnik_last_sync_at')||'0',10) || 0;
+    const b1 = parseInt(localStorage.getItem('spevnik_last_sync_bytes')||'0',10) || 0;
+    if (t1) lastXmlSyncAt = t1;
+    if (b1) lastXmlSyncBytes = b1;
+  } catch(e) {}
+
   const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
   const nodes = xml.getElementsByTagName('song');
 
@@ -1309,6 +1429,7 @@ function renderSong() {
 
   const is999 = String(currentSong.originalId||"").replace(/^0+/,'') === '999';
 
+  try {
   if (!is999){
     // Akordová šablóna zo slohy 1 (overlay) + doplnenie 2. polovice prvého refrenu (iba v rámci toho refrenu)
     text = applyChordTemplateOverlay(text);
@@ -1372,6 +1493,24 @@ function renderSong() {
   // sync presentation overlay
   updatePresentationUI();
   updateChordTemplateUI();
+  } catch (err){
+    // Safe fallback: show raw text so the app never becomes unusable
+    const el = document.getElementById('song-content');
+    if (el){
+      const safeText = (text == null) ? '' : String(text);
+      el.innerHTML = `
+        <div class="safe-mode-box">
+          <div class="safe-title">Bezpečný režim</div>
+          <div class="safe-sub">Nastala chyba pri zobrazení piesne. Zobrazený je surový text.</div>
+          <pre class="safe-pre">${escapeHtml(safeText)}</pre>
+        </div>`;
+      el.style.fontSize = fontSize + 'px';
+    }
+    console.error('renderSong error', err);
+    showToast('Chyba pri zobrazení – použil sa bezpečný režim.', false);
+    try { updatePresentationUI(); } catch(e) {}
+    try { updateChordTemplateUI(); } catch(e) {}
+  }
 }
 
 function transposeChord(c, step) {
