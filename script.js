@@ -30,8 +30,8 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDFJ_XoBEbg6KYe1oM8Wj9IAzkq4yqzMSkfApgcc3aFeD0-Pxgww/exec';
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v22';
-const APP_CACHE_NAME = 'spevnik-v23';
+const APP_BUILD = 'v24';
+const APP_CACHE_NAME = 'spevnik-v24';
 
 // Diagnostics state
 let lastXmlShownAt = 0;   // when we last rendered from cache/network
@@ -301,6 +301,31 @@ async function copyDiagnostics(){
   }
 }
 
+// Rýchla aktualizácia dát (bez mazania cache) – výrazne rýchlejšie hlavne na iPhone/iPad.
+async function quickUpdateApp(){
+  try { closeFabMenu(); } catch(e) {}
+  if (!navigator.onLine){
+    showToast('Si offline – aktualizácia nie je dostupná.', false);
+    return;
+  }
+  showToast('Aktualizujem dáta...', false);
+
+  // update SW (best effort)
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) reg.update();
+    }
+  } catch(e) {}
+
+  // načítaj nové dáta na pozadí
+  try { parseXML(); } catch(e) {}
+  try { loadDnesFromDrive(); } catch(e) {}
+  try { loadPlaylistsFromDrive(); } catch(e) {}
+
+  showToast('Hotovo.', true);
+}
+
 // click on overlay closes
 document.addEventListener('click', (e) => {
   const modal = document.getElementById('diag-modal');
@@ -564,6 +589,9 @@ function openSongById(id, source) {
 
   document.getElementById('song-list').style.display = 'none';
   document.getElementById('song-detail').style.display = 'block';
+
+  // keep screen awake while using song detail (best effort)
+  try { enableKeepAwake(); } catch(e) {}
 
   document.getElementById('render-title').innerText = `${s.displayId}. ${s.title}`;
 
@@ -1535,6 +1563,10 @@ function renderSong() {
 
 function transposeChord(c, step) {
   return c.replace(/[A-H][#b]?/g, (n) => {
+    // Normalizácia (SK/DE): A# = B (t.j. Bb). Toto zlepší aj transpozíciu, lebo A# nie je v scale.
+    // V reťazcoch typu "A#m" sa nahradí iba koreň "A#" -> vznikne "Bm".
+    if (n === 'A#') n = 'B';
+    if (n === 'a#') n = 'B';
     const idx = scale.indexOf(n);
     if (idx === -1) return n;
     let newIdx = (idx + step) % 12;
@@ -1549,7 +1581,55 @@ function changeFontSize(d) { applySongFontSize(fontSize + d); }
 
 /* ===== PREZENTAČNÝ REŽIM ===== */
 let presentationActive = false;
+// Udržanie displeja (Android/iOS – podľa podpory prehliadača)
 let __wakeLock = null;
+let __wakeKeep = false;
+let __wakePresent = false;
+
+async function updateWakeLock(){
+  const need = (__wakeKeep || __wakePresent);
+  if (!('wakeLock' in navigator)) return;
+
+  // Re-žiadaj po návrate z pozadia (iOS/Android to často uvoľní)
+  if (need && !__wakeLock){
+    try {
+      __wakeLock = await navigator.wakeLock.request('screen');
+      try { __wakeLock.addEventListener('release', () => { __wakeLock = null; }); } catch(e) {}
+    } catch (e) { __wakeLock = null; }
+  }
+  if (!need && __wakeLock){
+    try { await __wakeLock.release(); } catch (e) {}
+    __wakeLock = null;
+  }
+}
+
+function enableKeepAwake(){
+  __wakeKeep = true;
+  updateWakeLock();
+}
+function disableKeepAwake(){
+  __wakeKeep = false;
+  updateWakeLock();
+}
+
+function armKeepAwake(){
+  // WakeLock väčšinou nevyžaduje gesto, ale na niektorých zariadeniach je to spoľahlivejšie.
+  // Preto to "naštartujeme" po prvom dotyku/kliku.
+  if (armKeepAwake._armed) return;
+  armKeepAwake._armed = true;
+
+  const start = () => {
+    enableKeepAwake();
+  };
+  document.addEventListener('pointerdown', start, { once:true, passive:true });
+  document.addEventListener('touchstart', start, { once:true, passive:true });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (__wakeKeep || __wakePresent)) {
+      updateWakeLock();
+    }
+  });
+}
 
 async function enterPresentationMode() {
   presentationActive = true;
@@ -1565,11 +1645,8 @@ async function enterPresentationMode() {
   } catch (e) {}
 
   // wake lock (best effort)
-  try {
-    if ('wakeLock' in navigator) {
-      __wakeLock = await navigator.wakeLock.request('screen');
-    }
-  } catch (e) { __wakeLock = null; }
+  __wakePresent = true;
+  try { await updateWakeLock(); } catch(e) {}
 
   updatePresentationUI();
 }
@@ -1580,12 +1657,8 @@ async function exitPresentationMode() {
   const pc = document.getElementById('presentControls');
   if (pc) pc.setAttribute('aria-hidden', 'true');
 
-  try {
-    if (__wakeLock) {
-      await __wakeLock.release();
-      __wakeLock = null;
-    }
-  } catch (e) { __wakeLock = null; }
+  __wakePresent = false;
+  try { await updateWakeLock(); } catch(e) {}
 
   try {
     if (document.fullscreenElement && document.exitFullscreen) {
@@ -2065,13 +2138,8 @@ function editSpecialToken(i){
 }
 
 function addSpecialStep(kind){
-  // Ak už existuje, radšej ho uprav
-  const re = new RegExp('^' + String(kind || '').toUpperCase() + '(\\(|$)', 'i');
-  const existingIdx = formModalOrder.findIndex(t => re.test(String(t || '').trim()));
-  if (existingIdx >= 0){
-    editSpecialToken(existingIdx);
-    return;
-  }
+  // Umožni vložiť Predohra/Medzihra/Dohra viackrát (bez obmedzenia na 1 výskyt).
+  // Poznámku vždy ponúkneme (voliteľná).
 
   // Predvyplň poznámku z textu piesne, ak existuje "Predohra: ..." atď.
   let preset = '';
@@ -3055,6 +3123,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const __pn = document.getElementById('playlist-name');
   if (__pn) __pn.addEventListener('input', () => { updatePlaylistSaveEnabled(); playlistDirty = true; });
   updatePlaylistSaveEnabled();
+
+  // Neuspávať displej (best effort). Aktivuje sa po prvom dotyku/kliku.
+  try { armKeepAwake(); } catch(e) {}
 
   // ak užívateľ ukončí fullscreen (napr. systémovým gestom), vypni prezentáciu
   document.addEventListener('fullscreenchange', () => {
