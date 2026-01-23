@@ -230,7 +230,8 @@
   </button>
 
   <div id="fab-menu" class="fab-menu" aria-hidden="true">
-    <button id="fab-update-btn" onclick="hardResetApp()">Aktualizovať aplikáciu</button>
+    <button id="fab-sync-btn" onclick="quickUpdateApp()">Aktualizovať dáta</button>
+    <button id="fab-update-btn" onclick="hardResetApp()">Tvrdý reset</button>
     <button id="fab-diag-btn" onclick="openDiagnostics()">Diagnostika</button>
   </div>
 </div>
@@ -244,7 +245,7 @@
   <button id="psExit" onclick="exitPresentationMode()" aria-label="Ukončiť"><i class="fas fa-xmark"></i></button>
 </div>
 
-<script src="script.js?v=28"></script>
+<script src="script.js?v=29"></script>
 
   <!-- FORM EDITOR MODAL -->
   <div id="form-modal" class="modal-overlay" style="display:none;">
