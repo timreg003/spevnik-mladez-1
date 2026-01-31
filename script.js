@@ -143,8 +143,8 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v30';
-const APP_CACHE_NAME = 'spevnik-v30';
+const APP_BUILD = 'v31';
+const APP_CACHE_NAME = 'spevnik-v31';
 
 
 const SPEVNIK_XML_CACHE_KEY = 'spevnik-export.xml';
@@ -334,6 +334,7 @@ function showToast(message, ok=true){
 
 
 function setSyncStatus(text, kind){
+  return;
   const el = document.getElementById('syncStatus');
   if (!el) return;
 
