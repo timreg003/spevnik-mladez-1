@@ -123,8 +123,30 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v27';
-const APP_CACHE_NAME = 'spevnik-v27';
+const APP_BUILD = 'v28';
+const APP_CACHE_NAME = 'spevnik-v28';
+
+
+const SPEVNIK_XML_CACHE_KEY = 'spevnik-export.xml';
+
+async function cacheXmlToCacheStorage(xmlText){
+  try{
+    if (!('caches' in window)) return;
+    const cache = await caches.open(APP_CACHE_NAME + '-data');
+    await cache.put(SPEVNIK_XML_CACHE_KEY, new Response(xmlText, { headers: { 'Content-Type': 'text/plain; charset=utf-8' }}));
+  }catch(e){}
+}
+
+async function readXmlFromCacheStorage(){
+  try{
+    if (!('caches' in window)) return '';
+    const cache = await caches.open(APP_CACHE_NAME + '-data');
+    const resp = await cache.match(SPEVNIK_XML_CACHE_KEY);
+    if (!resp) return '';
+    return await resp.text();
+  }catch(e){ return ''; }
+}
+
 
 // Diagnostics state
 let lastXmlShownAt = 0;   // when we last rendered from cache/network
@@ -136,10 +158,22 @@ function jsonpRequest(url){
   return new Promise((resolve, reject) => {
     const cb = "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     const s = document.createElement('script');
+    const JSONP_TIMEOUT_MS = 15000;
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      try { delete window[cb]; } catch(e) {}
+      try { s.remove(); } catch(e) {}
+      reject(new Error('jsonp timeout'));
+    }, JSONP_TIMEOUT_MS);
     const sep = url.includes('?') ? '&' : '?';
     const full = url + sep + "callback=" + cb + "&t=" + Date.now();
 
     window[cb] = (data) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
       cleanup();
       resolve(data);
     };
@@ -152,6 +186,9 @@ function jsonpRequest(url){
     s.src = full;
     s.async = true;
     s.onerror = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
       cleanup();
       reject(new Error("JSONP load failed"));
     };
@@ -499,6 +536,16 @@ renderPlaylistsUI(true);
 async function parseXML() {
   // iOS: neblokuj štart čakaním na sieť. Najprv ukáž cache (ak existuje), potom v pozadí obnov.
   const saved = localStorage.getItem('offline_spevnik');
+
+// Ak je localStorage prázdny (iOS ho vie vyčistiť), skús Cache Storage.
+let cacheStorageText = '';
+if (!saved || !saved.trim()){
+  cacheStorageText = await readXmlFromCacheStorage();
+  if (cacheStorageText && cacheStorageText.trim()){
+    setTimeout(() => { try { processXML(cacheStorageText, { source:'cache' }); } catch(e) {} }, 0);
+  }
+}
+
   if (saved && saved.trim()) {
     // odlož na ďalší tick, aby sa UI stihlo vykresliť
     setTimeout(() => { try { processXML(saved, { source:'cache' }); } catch(e) {} }, 0);
@@ -511,6 +558,7 @@ async function parseXML() {
       const prev = saved || "";
       if (xmlText !== prev) {
         localStorage.setItem('offline_spevnik', xmlText);
+        cacheXmlToCacheStorage(xmlText);
         // diagnostics: remember when we successfully synced from network
         try {
           const now = Date.now();
@@ -1326,12 +1374,24 @@ function toggleDnesView(){
 
 
 
+
+const TEMPLATE_PREFIX = '\u2063'; // invisible separator for auto-inserted chordlines
+function stripTemplatePrefix(line){
+  const t = String(line ?? '');
+  return t.startsWith(TEMPLATE_PREFIX) ? t.slice(TEMPLATE_PREFIX.length) : t;
+}
+function isTemplateChordLine(line){
+  return String(line ?? '').startsWith(TEMPLATE_PREFIX);
+}
+
 function hasChordInLine(line){
-  return /\[[^\]]+\]/.test(String(line||''));
+  const t = stripTemplatePrefix(line);
+  return /\[[^\]]+\]/.test(String(t||''));
 }
 
 function stripChordsFromLine(line){
-  return String(line||'').replace(/\[[^\]]+\]/g, '');
+  const t = stripTemplatePrefix(line);
+  return String(t||'').replace(/\[[^\]]+\]/g, '');
 }
 
 function isChordOnlyLine(line){
@@ -1344,7 +1404,8 @@ function isChordOnlyLine(line){
 }
 
 function extractChordsInline(line){
-  return (String(line||'').match(/\[[^\]]+\]/g) || []);
+  const t = stripTemplatePrefix(line);
+  return (String(t||'').match(/\[[^\]]+\]/g) || []);
 }
 
 function classifyLabel(label){
@@ -1510,7 +1571,7 @@ function applyVerse1TemplateToVerseBlock(block, template){
   let li = 0;
   for (const info of lyricInfos){
     const pat = template[li] || '';
-    if (pat) insertBefore.set(info.lineIndex, pat);
+    if (pat) insertBefore.set(info.lineIndex, TEMPLATE_PREFIX + pat);
     li++;
   }
 
@@ -1547,7 +1608,7 @@ function fillHalfChorusOnce(segs){
       if (wasEmpty && now){
         // ak lyric riadok už náhodou obsahuje akordy, nestrkaj nad neho
         const line = String(body[infos[i].lineIndex] ?? '');
-        if (!hasChordInLine(line)) insertBefore.set(infos[i].lineIndex, now);
+        if (!hasChordInLine(line)) insertBefore.set(infos[i].lineIndex, TEMPLATE_PREFIX + now);
       }
     }
     if (insertBefore.size === 0) return seg;
