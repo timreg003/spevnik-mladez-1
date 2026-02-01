@@ -216,6 +216,175 @@ function jsonpRequest(url){
   });
 }
 
+
+// ---------------- LITURGICKÝ KALENDÁR (cez Google Apps Script proxy) ----------------
+const LS_LITURGIA_CACHE = 'liturgia_cache_v1';
+const __liturgiaInFlight = new Map(); // dateISO -> Promise
+
+function __liturgiaLoadCache(){
+  try{
+    const raw = localStorage.getItem(LS_LITURGIA_CACHE);
+    const obj = raw ? JSON.parse(raw) : {};
+    return (obj && typeof obj === 'object') ? obj : {};
+  }catch(e){ return {}; }
+}
+function __liturgiaSaveCache(obj){
+  try{
+    localStorage.setItem(LS_LITURGIA_CACHE, JSON.stringify(obj||{}));
+  }catch(e){}
+}
+function __liturgiaGet(dateISO){
+  const c = __liturgiaLoadCache();
+  const v = c[dateISO];
+  if (!v) return null;
+  return v;
+}
+function __liturgiaPut(dateISO, data){
+  const c = __liturgiaLoadCache();
+  c[dateISO] = Object.assign({ ts: Date.now() }, data || {});
+  // trim to max 60 days (LRU-ish by ts)
+  try{
+    const entries = Object.entries(c).filter(([k,v]) => v && typeof v === 'object' && v.ts);
+    entries.sort((a,b)=> (b[1].ts||0)-(a[1].ts||0));
+    const keep = entries.slice(0, 60);
+    const out = {};
+    for (const [k,v] of keep) out[k]=v;
+    __liturgiaSaveCache(out);
+  }catch(e){
+    __liturgiaSaveCache(c);
+  }
+}
+
+function parseISODateFromDnesTitle(title){
+  const t = String(title||'');
+  const m = t.match(/(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\.?/);
+  if (!m) return null;
+  const d = parseInt(m[1],10);
+  const mo = parseInt(m[2],10);
+  const y = m[3] ? parseInt(m[3],10) : (new Date()).getFullYear();
+  if (!d || !mo || mo<1 || mo>12 || d<1 || d>31) return null;
+  const dd = String(d).padStart(2,'0');
+  const mm = String(mo).padStart(2,'0');
+  const yyyy = String(y).padStart(4,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function __liturgiaExtractPsalmAndAlleluia(fullText){
+  const lines = String(fullText||'').split(/\r?\n/).map(x=>String(x).replace(/\s+$/,''));
+  // find psalm header
+  let psIdx = -1;
+  for (let i=0;i<lines.length;i++){
+    if (/^####\s*Responzóriový žalm/i.test(lines[i].trim())) { psIdx=i; break; }
+  }
+  let psalmText = '';
+  if (psIdx>=0){
+    // include nearest refrain line above within 6 lines
+    let start = psIdx;
+    for (let j=psIdx-1;j>=0 && j>=psIdx-6;j--){
+      if (/^R\.\s*:/i.test(lines[j].trim())){
+        start = j;
+        break;
+      }
+    }
+    let end = lines.length;
+    for (let i=psIdx+1;i<lines.length;i++){
+      if (/^####\s+/.test(lines[i].trim())) { end=i; break; }
+    }
+    psalmText = lines.slice(start,end).join('\n').trim();
+  }
+
+  // alleluia verse: take last "Aleluja, aleluja, aleluja." line
+  let alleluiaVerse = '';
+  for (let i=lines.length-1;i>=0;i--){
+    const ln = lines[i].trim();
+    if (/^Aleluja,\s*aleluja,\s*aleluja\./i.test(ln)){
+      alleluiaVerse = ln;
+      break;
+    }
+  }
+  return { psalmText, alleluiaVerse };
+}
+
+async function ensureLiturgia(dateISO){
+  if (!dateISO) return null;
+  const cached = __liturgiaGet(dateISO);
+  if (cached && (cached.psalmText || cached.alleluiaVerse || cached.text)) return cached;
+
+  if (__liturgiaInFlight.has(dateISO)) return __liturgiaInFlight.get(dateISO);
+
+  const p = (async ()=>{
+    try{
+      const data = await jsonpRequest(`${SCRIPT_URL}?action=liturgia&den=${encodeURIComponent(dateISO)}`);
+      if (data && data.ok && data.text){
+        const extracted = __liturgiaExtractPsalmAndAlleluia(data.text);
+        const payload = {
+          title: data.title || '',
+          text: String(data.text||''),
+          psalmText: data.psalmText || extracted.psalmText || '',
+          alleluiaVerse: data.alleluiaVerse || extracted.alleluiaVerse || ''
+        };
+        __liturgiaPut(dateISO, payload);
+        return payload;
+      }
+    }catch(e){}
+    return null;
+  })();
+
+  __liturgiaInFlight.set(dateISO, p);
+  try{
+    const out = await p;
+    return out;
+  } finally {
+    __liturgiaInFlight.delete(dateISO);
+  }
+}
+
+function __liturgiaTextToHTML(txt){
+  // reuse songTextToHTML formatting for a consistent look
+  return songTextToHTML(String(txt||''));
+}
+
+function renderLiturgiaToPanel(dateISO){
+  const box = document.getElementById('liturgia-content');
+  if (!box) return;
+  const cached = dateISO ? __liturgiaGet(dateISO) : null;
+  if (!cached || !cached.text){
+    box.innerHTML = '<div class="loading">Načítavam...</div>';
+    return;
+  }
+  box.innerHTML = __liturgiaTextToHTML(cached.text);
+}
+
+async function loadLiturgia(dateISO){
+  const box = document.getElementById('liturgia-content');
+  if (box) box.innerHTML = '<div class="loading">Načítavam...</div>';
+  const data = await ensureLiturgia(dateISO);
+  if (!data){
+    if (box) box.innerHTML = '<div class="dnes-empty">Liturgické čítania sa nepodarilo načítať.</div>';
+    return;
+  }
+  renderLiturgiaToPanel(dateISO);
+}
+
+function openLiturgiaDatePicker(){
+  const inp = document.getElementById('liturgia-date');
+  if (!inp) return;
+
+  const isoFromTitle = parseISODateFromDnesTitle(dnesTitle) || null;
+  const today = new Date();
+  const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  const targetIso = isoFromTitle || inp.value || isoToday;
+  inp.value = targetIso;
+
+  // open picker
+  if (typeof inp.showPicker === 'function'){
+    try { inp.showPicker(); return; } catch(e){}
+  }
+  inp.click();
+}
+
+
 const ADMIN_PWD = "qwer";
 const FORMSPREE_URL = "https://formspree.io/f/mvzzkwlw";
 
@@ -525,6 +694,18 @@ function toggleSection(section, expand = null) {
 
   const show = expand !== null ? expand : (content.style.display === 'none');
   content.style.display = show ? 'block' : 'none';
+  // auto-load liturgia when opened
+  if (section === 'liturgia' && show) {
+    const inp = document.getElementById('liturgia-date');
+    const isoFromTitle = parseISODateFromDnesTitle(dnesTitle) || null;
+    const today = new Date();
+    const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const iso = (inp && inp.value) ? inp.value : (isoFromTitle || isoToday);
+    if (inp) inp.value = iso;
+    // render from cache first, then refresh online
+    renderLiturgiaToPanel(iso);
+    if (navigator.onLine) loadLiturgia(iso);
+  }
   chevron.className = show ? 'fas fa-chevron-up section-chevron' : 'fas fa-chevron-down section-chevron';
 }
 
@@ -771,6 +952,17 @@ function openSongById(id, source) {
   const __is999 = String(s.originalId||"").replace(/^0+/,'') === '999';
   setChordTemplateEnabled(!__is999);
   updateChordTemplateUI();
+
+  // Liturgický kalendár UI
+  const __litBtn = document.getElementById('liturgia-open-btn');
+  if (__litBtn) __litBtn.addEventListener('click', (e) => { e.preventDefault(); openLiturgiaDatePicker(); });
+  const __litDate = document.getElementById('liturgia-date');
+  if (__litDate) __litDate.addEventListener('change', () => {
+    const iso = __litDate.value;
+    if (iso) loadLiturgia(iso);
+  });
+
+
 
 
   // V detaile piesne z 'Piesne na dnes' vždy defaultne zobraz verziu DNES
@@ -1794,7 +1986,40 @@ function renderSong() {
   }
 
   const el = document.getElementById('song-content');
-  el.innerHTML = songTextToHTML(text);
+
+  // ALELUJA (999): automaticky vlož Žalm pred a Alelujový verš po (podľa dátumu z názvu priečinka "Piesne na dnes")
+  if (is999 && currentListSource === 'dnes' && !dnesShowOriginal) {
+    const iso = parseISODateFromDnesTitle(dnesTitle);
+    const cached = iso ? __liturgiaGet(iso) : null;
+
+    // render song first
+    const songHTML = songTextToHTML(text);
+
+    const psalm = cached && cached.psalmText ? String(cached.psalmText) : '';
+    const verse = cached && cached.alleluiaVerse ? String(cached.alleluiaVerse) : '';
+
+    const psalmHTML = psalm ? `<div class="lit-block"><div class="lit-block-title">ŽALM</div><div class="lit-block-body">${__liturgiaTextToHTML(psalm)}</div></div>` : '';
+    const verseHTML = verse ? `<div class="lit-block"><div class="lit-block-title">ALELUJOVÝ VERŠ</div><div class="lit-block-body">${__liturgiaTextToHTML(verse)}</div></div>` : '';
+
+    // If nothing cached but online, fetch and rerender (non-blocking)
+    if ((!psalm || !verse) && iso && navigator.onLine) {
+      ensureLiturgia(iso).then(() => {
+        // still on same song?
+        try{
+          const still999 = currentSong && String(currentSong.originalId||'').replace(/^0+/,'') === '999';
+          if (still999 && currentListSource === 'dnes' && !dnesShowOriginal) renderSong();
+        }catch(e){}
+      });
+    }
+
+    // Fallback placeholders (offline without cache)
+    const psalmFallback = (!psalmHTML) ? `<div class="lit-block lit-block-empty"><div class="lit-block-title">ŽALM</div><div class="lit-block-body">Žalm pre tento deň nie je uložený offline.</div></div>` : psalmHTML;
+    const verseFallback = (!verseHTML) ? `<div class="lit-block lit-block-empty"><div class="lit-block-title">ALELUJOVÝ VERŠ</div><div class="lit-block-body">Alelujový verš pre tento deň nie je uložený offline.</div></div>` : verseHTML;
+
+    el.innerHTML = `${psalmFallback}${songHTML}${verseFallback}`;
+  } else {
+    el.innerHTML = songTextToHTML(text);
+  }
   el.style.fontSize = fontSize + 'px';
 
   // sync presentation overlay
@@ -2036,6 +2261,19 @@ function loadDnesCacheFirst(showEmptyAllowed) {
     if (!s) return '';
     return songRowHTMLClickable(s.displayId, s.title, `openSongById('${s.id}','dnes')`);
   }).join('');
+
+  // Ak sa v "Piesne na dnes" nachádza ALELUJA (999), pokús sa načítať liturgiu pre dátum z názvu priečinka
+  try{
+    const iso = parseISODateFromDnesTitle(payload.title);
+    const has999 = payload.ids.some(id => {
+      const s = songs.find(x => x.id === id);
+      return s && String(s.originalId||'').replace(/^0+/,'') === '999';
+    });
+    if (iso && has999 && navigator.onLine) {
+      ensureLiturgia(iso).then(()=>{ /* cache only */ });
+    }
+  }catch(e){}
+
 }
 async function loadDnesFromDrive() {
   dnesFetchInFlight = true;
@@ -2339,104 +2577,29 @@ function editSpecialToken(i){
   renderFormModalOrder();
 }
 
-function extractSpecialNotesFromText(origText, kind){
-  const text = String(origText || '');
-  if (!text) return [];
-  const kindUpper = String(kind || '').toUpperCase();
-  const kindSk = (kindUpper === 'PREDOHRA' ? 'Predohra'
-                : (kindUpper === 'MEDZIHRA' ? 'Medzihra'
-                : (kindUpper === 'DOHRA' ? 'Dohra' : 'Poznámka')));
-
-  const lines = text.split(/\r?\n/);
-  const out = [];
-  const label = (kindSk === 'Poznámka' ? '(?:Poznámka|Poznamka)' : kindSk);
-  const labelRe = new RegExp('^\\s*\\[?\\s*' + label + '\\s*\\]?\\s*(?:[:\\-–—])?\\s*(.*)\\s*$', 'i');
-
-  for (let i = 0; i < lines.length; i++){
-    let line = String(lines[i] || '').trim();
-    if (!line) continue;
-
-    // allow forms like "[Predohra: ...]" (whole line wrapped)
-    let candidateLine = line;
-    if (candidateLine.startsWith('[') && candidateLine.endsWith(']') && candidateLine.length > 2){
-      candidateLine = candidateLine.slice(1, -1).trim();
-    }
-
-    const m = candidateLine.match(labelRe);
-    if (!m) continue;
-
-    let note = String(m[1] || '').trim();
-
-    // If label is alone (e.g. "[Predohra]"), take next non-empty line as note
-    if (!note){
-      for (let j = i + 1; j < lines.length; j++){
-        const next = String(lines[j] || '').trim();
-        if (!next) continue;
-        note = next;
-        break;
-      }
-    }
-
-    if (note){
-      // if any trailing bracket left from odd formatting, trim one
-      note = note.replace(/\]$/, '').trim();
-      out.push(note);
-    }
-  }
-
-  // dedupe while preserving order
-  const seen = new Set();
-  return out.filter(x => {
-    const k = String(x || '').trim();
-    if (!k) return false;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
-
 function addSpecialStep(kind){
-  if (!isAdmin) return;
-  const kindU = String(kind || '').toUpperCase();
-
-  const makeToken = (note) => {
-    const v = String(note || '').trim();
-    return v ? `${kindU}(${v})` : kindU;
-  };
-
-  // Try auto-preset from song text (supports both plain text and chords like [G] [D] ...)
-  let presets = [];
-  const s = songs.find(x => x.id === formModalSongId);
-  if (s && s.origText){
-    presets = extractSpecialNotesFromText(s.origText, kindU);
-  }
-
-  // If there is exactly one match in the song, insert it automatically (can be edited by tapping the chip)
-  if (presets.length === 1){
-    formModalOrder.push(makeToken(presets[0]));
-    renderFormModalOrder();
+  // Ak už existuje, radšej ho uprav
+  const re = new RegExp('^' + String(kind || '').toUpperCase() + '(\\(|$)', 'i');
+  const existingIdx = formModalOrder.findIndex(t => re.test(String(t || '').trim()));
+  if (existingIdx >= 0){
+    editSpecialToken(existingIdx);
     return;
   }
 
-  // If there are multiple matches, let user choose one
-  if (presets.length > 1){
-    const preview = presets.map((p, idx) => `${idx + 1}) ${p.length > 90 ? (p.slice(0, 87) + '…') : p}`).join('\n');
-    const pick = prompt(`Našiel som viac možností pre ${kindU} v texte piesne.\nVyber číslo alebo zadaj 0 pre vlastný text:\n\n${preview}`, '1');
-    if (pick === null) return;
-    const n = parseInt(String(pick).trim(), 10);
-    if (Number.isFinite(n) && n >= 1 && n <= presets.length){
-      formModalOrder.push(makeToken(presets[n - 1]));
-      renderFormModalOrder();
-      return;
-    }
-    if (String(pick).trim() !== '0') return; // invalid -> cancel
-    // fallthrough to custom
+  // Predvyplň poznámku z textu piesne, ak existuje "Predohra: ..." atď.
+  let preset = '';
+  const s = songs.find(x => x.id === formModalSongId);
+  if (s && s.origText){
+    const kindSk = (String(kind||'').toUpperCase() === 'PREDOHRA' ? 'Predohra' : (String(kind||'').toUpperCase() === 'MEDZIHRA' ? 'Medzihra' : (String(kind||'').toUpperCase() === 'DOHRA' ? 'Dohra' : 'Poznámka')));
+    const rx = new RegExp('^' + kindSk + '\\s*:\\s*(.*)$', 'im');
+    const m = String(s.origText).match(rx);
+    if (m && m[1]) preset = String(m[1]).trim();
   }
 
-  // No preset or user chose custom
-  const note = prompt(`${kindU} – poznámka (voliteľné):`, '');
+  const note = prompt(`${kind} – poznámka (voliteľné):`, preset);
   if (note === null) return;
-  formModalOrder.push(makeToken(note));
+  const token = String(note).trim() ? `${String(kind).toUpperCase()}(${String(note).trim()})` : `${String(kind).toUpperCase()}`;
+  formModalOrder.push(token);
   renderFormModalOrder();
 }
 
@@ -3304,26 +3467,11 @@ async function hardResetApp() {
 }
 
 /* Formspree */
-function updateFormOnlineState(){
-  const btn = document.getElementById("submit-btn");
-  if (!btn) return;
-  btn.disabled = !navigator.onLine;
-}
-
 async function submitErrorForm(event) {
   event.preventDefault();
   const form = document.getElementById("error-form");
   const status = document.getElementById("form-status");
   const btn = document.getElementById("submit-btn");
-
-  // Offline: do not attempt sending
-  if (!navigator.onLine) {
-    status.style.display = "block";
-    status.style.color = "#ff4444";
-    status.innerText = "Si offline – nedá sa odoslať.";
-    try { showToast("Si offline – neodoslané ❌", false); } catch(e) {}
-    return;
-  }
 
   status.style.display = "block";
   status.style.color = "#00ff00";
@@ -3431,15 +3579,16 @@ document.addEventListener('gesturechange', (e) => {
 
 document.addEventListener('DOMContentLoaded', () => {
   setSyncStatus(navigator.onLine ? "Aktualizujem…" : "Offline", navigator.onLine ? "sync-warn" : "sync-warn");
-  updateFormOnlineState();
-  window.addEventListener('online', updateFormOnlineState);
-  window.addEventListener('offline', updateFormOnlineState);
   // restore song font size (detail)
   const savedSong = parseInt(localStorage.getItem(LS_SONG_FONT_SIZE) || String(fontSize), 10);
   if (!isNaN(savedSong)) fontSize = Math.max(12, Math.min(34, savedSong));
   updateFontSizeLabel();
   initSongPinchToZoom();
   updateChordTemplateUI();
+// Try to request persistent storage (helps iOS/Android keep offline cache longer)
+try {
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+} catch(e) {}
 
 // PWA offline
 if ('serviceWorker' in navigator) {
