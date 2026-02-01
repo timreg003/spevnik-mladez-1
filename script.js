@@ -266,6 +266,19 @@ function normText(s){
     .replace(/[\u0300-\u036f]/g,'');
 }
 
+
+function normSimple(s){
+  return String(s||'').trim().toLowerCase();
+}
+function isAleluja999Song(song){
+  if (!song) return false;
+  const id = String(song.originalId||"").replace(/^0+/,'');
+  const title = normSimple(song.title);
+  return id === '999' && title === 'aleluja';
+}
+
+
+
 function todayLabelSk(d){
   const dt = d ? new Date(d) : new Date();
   const days = ["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
@@ -534,6 +547,30 @@ function toggleSection(section, expand = null) {
   const show = expand !== null ? expand : (content.style.display === 'none');
   content.style.display = show ? 'block' : 'none';
   chevron.className = show ? 'fas fa-chevron-up section-chevron' : 'fas fa-chevron-down section-chevron';
+}
+
+
+function forceInitialCollapsed(){
+  try{
+    const search = document.getElementById('search');
+    if (search) search.value = '';
+  }catch(e){}
+  // vždy začni na domovskej obrazovke (zoznam)
+  const list = document.getElementById('song-list');
+  const detail = document.getElementById('song-detail');
+  if (list) list.style.display = 'block';
+  if (detail) detail.style.display = 'none';
+
+  // zatvor všetky sekcie
+  ['dnes','playlists','all','lit','history','admin','skuska'].forEach(id=>{
+    const c = document.getElementById(id+'-section-wrapper');
+    const ch = document.getElementById(id+'-chevron');
+    if (c) c.style.display = 'none';
+    if (ch) ch.className = 'fas fa-chevron-down section-chevron';
+  });
+
+  // zruš prípadné obnovenie focus/scroll
+  try{ window.scrollTo(0,0); }catch(e){}
 }
 
 /* ===== HOME UI ===== */
@@ -1149,6 +1186,29 @@ function songTextToHTML(text) {
     const line = String(raw ?? '');
     const trimmed = line.trim();
 
+    // Aleluja 999 – vložené bloky (Žalm / Alelujový verš) ako samostatné chlieviky
+    const litM = trimmed.match(/^\[\[LIT-(PSALM|VERSE)\|(.*)\]\]$/);
+    if (litM){
+      // zatvor otvorenú sekciu piesne, nech sa to nemieša s gridom
+      closeSection();
+      pendingLabel = '';
+      pendingSpecial = '';
+      pendingChordLines = [];
+      pendingBlanks = 0;
+
+      const kind = litM[1];
+      let payload = '';
+      try { payload = decodeURIComponent(litM[2] || ''); } catch(e){ payload = ''; }
+      const title = (kind === 'PSALM') ? 'Žalm' : 'Alelujový verš';
+
+      out.push('<div class="aleluja-insert">');
+      out.push(`<div class="aleluja-h">${escapeHtml(title)}</div>`);
+      out.push(`<pre>${escapeHtml(payload)}</pre>`);
+      out.push('</div>');
+      continue;
+    }
+
+
     // Blank line (buffer; we'll decide later whether to render it)
     if (!trimmed) {
       pendingBlanks++;
@@ -1727,14 +1787,17 @@ function renderSong() {
     : currentSong.origText;
 
   const is999 = String(currentSong.originalId||"").replace(/^0+/,'') === '999';
+  const isAleluja999 = isAleluja999Song(currentSong);
 
   // Aleluja (999) – v 'Piesne na dnes' vlož Žalm pred a Alelujový verš po (podľa dátumu z názvu priečinka).
-  if (is999 && currentListSource === 'dnes') {
+  if (isAleluja999 && currentListSource === 'dnes') {
     try {
       const iso = getIsoDateFromDnesTitleSafe();
       text = injectPsalmAndAlleluiaBlocks(text, iso);
     } catch(e) {}
   }
+
+
 
 
   try {
@@ -3355,6 +3418,7 @@ document.addEventListener('gesturechange', (e) => {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  forceInitialCollapsed();
   // 🔒 vždy začni so zavretými sekciami (aj keď prehliadač obnovil stav formulárov)
   try{
     const search = document.getElementById('search');
@@ -3527,11 +3591,101 @@ function setLitHeader(iso, variants){
   const right = document.getElementById('lit-head-right');
   if (left){
     const w = weekdaySkFromISO(iso);
-    left.textContent = `${dmyFromISO(iso)}${w ? ' ('+w+')' : ''}`;
+    left.textContent = `${dmyFromISO(iso)}${w ? ' ' + w.toLowerCase() : ''}`;
   }
   if (right){
     right.textContent = litFeastSummary(variants) || '';
   }
+}
+
+
+function trimLitTextStart(text){
+  const lines = String(text||'').replace(/\r/g,'').split('\n').map(l=>String(l||'').trim());
+  // drop empty-only, but keep structure later
+  // nájdi prvý "hlavný" liturgický nadpis (typicky: '4. nedeľa v Cezročnom období' alebo 'Slávnosť ...')
+  const idx = lines.findIndex(l =>
+    /\bv\s+(cezročnom|adventnom|vianočnom|pôstnom|velkonočnom|veľkonočnom)\s+obdob/i.test(l) ||
+    /^\d+\.\s*(nedeľa|nedela)\b/i.test(l) ||
+    /^(slávnosť|sviatok|spomienka|ľubovoľná spomienka)/i.test(l)
+  );
+  const cut = idx >= 0 ? idx : 0;
+  const sliced = lines.slice(cut);
+  // odstráň úplne krátke "šumy" (napr. 'Z', 'A', 'B', 'C' samostatne)
+  const cleaned = [];
+  for (const l of sliced){
+    if (!l) { cleaned.push(''); continue; }
+    if (l.length <= 2 && /^[A-ZÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]$/i.test(l)) continue;
+    cleaned.push(l);
+  }
+  // zredukuj veľké medzery
+  return cleaned.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+function litTextToCardsHTML(text){
+  const t = trimLitTextStart(text);
+  if (!t) return '<div style="opacity:.8;">—</div>';
+
+  const lines = t.split('\n');
+  const sections = [];
+  let cur = { h: '', sub: '', body: [] };
+
+  function pushCur(){
+    const body = cur.body.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+    if (cur.h || body){
+      sections.push({ h: cur.h, sub: cur.sub, body });
+    }
+    cur = { h: '', sub: '', body: [] };
+  }
+
+  const isHeader = (l) =>
+    /^(prvé čítanie|druhé čítanie|evanjelium|responzóriový žalm|alelujový verš|žalm)\b/i.test(l) ||
+    /^Čítanie\s+z\b/i.test(l);
+
+  // prvý riadok = názov dňa/slávenia
+  let i = 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+  const feast = (lines[i]||'').trim();
+  if (feast) {
+    sections.push({ h: feast, sub: '', body: '' });
+    i++;
+  }
+
+  for (; i < lines.length; i++){
+    const raw = lines[i];
+    const l = raw.trim();
+    if (!l){
+      cur.body.push('');
+      continue;
+    }
+
+    // nové bloky
+    if (isHeader(l)){
+      pushCur();
+      cur.h = l;
+      continue;
+    }
+
+    // scripture reference line (krátke, vyzerá ako "Sof 2, 3..." alebo "Ž 146, ...")
+    if (!cur.sub && /^[A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]{1,6}\s*\d/.test(l) && l.length < 40){
+      cur.sub = l;
+      continue;
+    }
+
+    cur.body.push(raw);
+  }
+  pushCur();
+
+  // build HTML
+  const out = ['<div class="lit-cards">'];
+  for (const s of sections){
+    out.push('<div class="lit-block">');
+    if (s.h) out.push('<div class="lit-h">'+escapeHtml(s.h)+'</div>');
+    if (s.sub) out.push('<div class="lit-sub">'+escapeHtml(s.sub)+'</div>');
+    if (s.body) out.push('<pre>'+escapeHtml(s.body)+'</pre>');
+    out.push('</div>');
+  }
+  out.push('</div>');
+  return out.join('');
 }
 
 function renderLitFromData(iso, data){
@@ -3566,13 +3720,13 @@ function renderLitFromData(iso, data){
   const idx = variants.length ? Math.min(getLitChoiceIndex(iso), variants.length-1) : 0;
   const chosen = variants.length ? variants[idx] : (data || {});
 
-  // obsah – ak má server full text, zobraz; inak zobraz aspoň žalm+verš
-  let out = '';
-  if (chosen && chosen.text) out = String(chosen.text);
-  if (!out){
+  // obsah – pekné formátovanie do chlievikov
+  let outText = '';
+  if (chosen && chosen.text) outText = String(chosen.text);
+  if (!outText){
     const ps = chosen && chosen.psalmText ? String(chosen.psalmText) : '';
     const av = chosen && chosen.alleluiaVerse ? String(chosen.alleluiaVerse) : '';
-    out = [ps && ('Žalm:\n'+ps), av && ('Alelujový verš:\n'+av)].filter(Boolean).join('\n\n');
+    outText = [ps && ('Responzóriový žalm\n'+ps), av && ('Alelujový verš\n'+av)].filter(Boolean).join('\n\n');
   }
 
   if (status){
@@ -3580,9 +3734,10 @@ function renderLitFromData(iso, data){
     status.classList.remove('loading');
   }
   if (content){
-    content.textContent = out || '—';
+    content.innerHTML = litTextToCardsHTML(outText);
   }
 }
+
 
 async function fetchLiturgia(iso){
   // JSONP cez GAS (kvôli CORS)
@@ -3715,10 +3870,36 @@ let __litInited = false;
 })();
 
 /* ----- Aleluja 999 vloženie blokov ----- */
+function cleanPsalmText(ps){
+  const lines = String(ps||'').split('\n').map(s=>String(s||'').trim());
+  // drop empty
+  let out = lines.filter(l=>l.length);
+  // drop anything before first R.:
+  const rIdx = out.findIndex(l => /^R\.\s*:/.test(l) || /^R:/.test(l));
+  if (rIdx > 0) out = out.slice(rIdx);
+  // stop on next big section marker
+  const stopIdx = out.findIndex(l => /(Alelujový verš|Evanjelium|Čítanie|Druhé čítanie|Prvé čítanie)/i.test(l));
+  if (stopIdx >= 0) out = out.slice(0, stopIdx);
+  // remove headers
+  out = out.filter(l => !/Responzóriový žalm/i.test(l));
+  return out.join('\n').trim();
+}
+
+function cleanAlleluiaVerse(av){
+  const lines = String(av||'').split('\n').map(s=>String(s||'').trim()).filter(l=>l.length);
+  // drop heading lines if present
+  let out = lines.filter(l => !/Alelujový verš/i.test(l));
+  // stop if it starts leaking into gospel
+  const stopIdx = out.findIndex(l => /(Evanjelium|Čítanie)/i.test(l));
+  if (stopIdx >= 0) out = out.slice(0, stopIdx);
+  // keep it concise (max 6 lines)
+  if (out.length > 6) out = out.slice(0,6);
+  return out.join('\n').trim();
+}
+
 function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   const cached = getCachedLit(iso);
   if (!cached || !cached.ok || !Array.isArray(cached.variants) || !cached.variants.length){
-    // ak sme online, dotiahni do cache a potom sa to samo prekreslí
     if (navigator.onLine){
       fetchLiturgia(iso).then(d=>{
         if (d && d.ok){
@@ -3735,29 +3916,24 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   const idx = Math.min(getLitChoiceIndex(iso), variants.length-1);
   const v = variants[idx] || variants[0];
 
-  const ps = (v && v.psalmText) ? String(v.psalmText).trim() : '';
-  const av = (v && v.alleluiaVerse) ? String(v.alleluiaVerse).trim() : '';
+  const ps = cleanPsalmText((v && v.psalmText) ? String(v.psalmText) : '');
+  const av = cleanAlleluiaVerse((v && v.alleluiaVerse) ? String(v.alleluiaVerse) : '');
 
-  const out = [];
-  // Žalm ako samostatný blok PRED piesňou
+  const core = String(alelujaText||'').trim();
+
+  // Presne 3 bloky: Žalm, text Aleluja, Alelujový verš
+  const parts = [];
   if (ps){
-    out.push('Žalm:');
-    out.push(ps);
-    out.push(''); // medzera medzi blokmi
+    parts.push(`[[LIT-PSALM|${encodeURIComponent(ps)}]]`);
   }
-
-  // Text Aleluja v strede (nezmenený)
-  out.push(String(alelujaText||'').trim());
-
-  // Alelujový verš ako samostatný blok PO piesni
+  parts.push(core);
   if (av){
-    out.push('');
-    out.push('Alelujový verš:');
-    out.push(av);
+    parts.push(`[[LIT-VERSE|${encodeURIComponent(av)}]]`);
   }
-
-  return out.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  return parts.join('\n').replace(/\n{3,}/g,'\n\n').trim();
 }
+
+
 
 
 function setupAlelujaLitControlsIfNeeded(){
@@ -3767,13 +3943,15 @@ function setupAlelujaLitControlsIfNeeded(){
   const is999 = currentSong && String(currentSong.originalId||"").replace(/^0+/,'') === '999';
   const isDnes = (currentListSource === 'dnes');
 
-  if (!is999 || !isDnes){
+  if (!isAleluja999 || !isDnes){
     box.style.display = 'none';
     box.innerHTML = '';
     return;
   }
 
   const iso = getIsoDateFromDnesTitleSafe();
+  const w = weekdaySkFromISO(iso);
+  const labelLine = `Aleluja – žalm a verš ${dmyFromISO(iso)}${w ? ' ' + w.toLowerCase() : ''}`;
   const cached = getCachedLit(iso);
   const variants = cached && cached.ok && Array.isArray(cached.variants) ? cached.variants : [];
   const summary = litFeastSummary(variants);
@@ -3783,7 +3961,7 @@ function setupAlelujaLitControlsIfNeeded(){
   box.style.display = 'block';
 
   if (!variants.length){
-    box.innerHTML = `<div class="tiny-label">Aleluja – Žalm a verš</div><div class="loading">Načítavam liturgiu...</div>`;
+    box.innerHTML = `<div class="tiny-label">${labelLine}</div><div class="loading">Načítavam liturgiu...</div>`;
     // dotiahni
     if (navigator.onLine){
       fetchLiturgia(iso).then(d=>{
@@ -3808,7 +3986,7 @@ function setupAlelujaLitControlsIfNeeded(){
   }).join('');
 
   box.innerHTML = `
-    <div class="tiny-label">Aleluja – Žalm a verš (${escapeHtml(dmyFromISO(iso))})</div>
+    <div class="tiny-label">Aleluja – žalm a verš (${escapeHtml(dmyFromISO(iso))})</div>
     ${summary ? `<div style="margin:6px 0 8px 0; opacity:.9;">${escapeHtml(summary)}</div>` : ``}
     ${variants.length>1 ? `
       <div style="display:flex; gap:10px; align-items:center;">
