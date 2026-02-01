@@ -15,7 +15,7 @@
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css?v=35"/>
+  <link rel="stylesheet" href="style.css?v=29"/>
 </head>
 
 <body>
@@ -116,33 +116,38 @@
     </div>
     <div id="all-section-wrapper" class="section-content" style="display:none;">
       <div id="piesne-list" class="list-box"><div class="loading">Načítavam...</div></div>
-      <!-- LITURGICKÝ KALENDÁR -->
-    <div class="section-header" onclick="toggleSection('liturgia')">
+  </div>
+
+    
+
+    <!-- LITURGICAL CALENDAR -->
+    <div class="section-header" onclick="toggleSection('lit')">
       <h2 class="playlist-header-title">LITURGICKÝ KALENDÁR</h2>
-      <i class="fas fa-chevron-down section-chevron" id="liturgia-chevron"></i>
+      <i class="fas fa-chevron-down section-chevron" id="lit-chevron"></i>
     </div>
-    <div id="liturgia-section-wrapper" class="section-content" style="display:none;">
-      <div class="lit-box">
-        <div class="lit-head">
-          <div id="lit-header" class="lit-header">—</div>
-          <div class="lit-options" id="lit-options" style="display:none;">
-            <div class="lit-options-label">Možnosť:</div>
-            <select id="lit-variant" class="lit-variant" onchange="onLitVariantChange()"></select>
-          </div>
-          <div class="lit-pick-row">
-            <button type="button" class="btn-neutral lit-pick-btn">
-              <i class="fas fa-calendar-alt"></i> Vybrať deň
-              <input id="lit-date" class="lit-date-input" type="date" />
-            </button>
-          </div>
+    <div id="lit-section-wrapper" class="section-content" style="display:none;">
+      <div class="lit-card">
+        <div class="lit-header">
+          <div id="lit-head-left" class="lit-head-left">—</div>
+          <div id="lit-head-right" class="lit-head-right"></div>
         </div>
-        <div id="lit-content" class="lit-content"><div class="loading">Načítavam...</div></div>
+
+        <div class="lit-picker">
+          <button id="lit-date-btn" class="btn-neutral" type="button"><i class="fas fa-calendar"></i> Vybrať deň</button>
+          <input id="lit-date-input" type="date" aria-label="Vybrať deň">
+        </div>
+
+        <div id="lit-variant-row" class="lit-variant-row" style="display:none;">
+          <span class="tiny-label">Možnosť:</span>
+          <select id="lit-variant-select"></select>
+        </div>
+
+        <div id="lit-status" class="lit-status loading">Načítavam...</div>
+        <div id="lit-content" class="lit-content"></div>
       </div>
     </div>
 
-</div>
-
-    <!-- HISTORY (public) -->
+<!-- HISTORY (public) -->
     <div class="section-header" onclick="toggleSection('history')">
       <h2 class="playlist-header-title">HISTÓRIA</h2>
       <i id="history-chevron" class="fas fa-chevron-down section-chevron"></i>
@@ -227,6 +232,8 @@
       </div>
     </div>
 
+    <div id="aleluja-lit-controls" style="display:none;"></div>
+
     <div id="song-content"></div>
 
     <!-- ERROR REPORT -->
@@ -272,7 +279,7 @@
   <button id="psExit" onclick="exitPresentationMode()" aria-label="Ukončiť"><i class="fas fa-xmark"></i></button>
 </div>
 
-<script src="script.js?v=36"></script>
+<script src="script.js?v=37"></script>
 
   <!-- FORM EDITOR MODAL -->
   <div id="form-modal" class="modal-overlay" style="display:none;">
