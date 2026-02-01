@@ -885,3 +885,19 @@ body.present #presentControls{ display:flex; }
 .lit-block-empty{
   opacity: 0.75;
 }
+
+
+.liturgia-title{
+  font-weight:800;
+  margin:4px 0 10px;
+  line-height:1.25;
+}
+
+.liturgia-variant{
+  border:1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding:10px 12px;
+  border-radius:12px;
+  font-weight:700;
+}
