@@ -221,6 +221,19 @@ function jsonpRequest(url){
 const LS_LITURGIA_CACHE = 'liturgia_cache_v1';
 const __liturgiaInFlight = new Map(); // dateISO -> Promise
 
+const LS_LITURGIA_VARIANT_PREFIX = 'liturgia_variant_';
+function getLiturgiaVariantChoice(dateISO){
+  if (!dateISO) return 0;
+  const v = localStorage.getItem(LS_LITURGIA_VARIANT_PREFIX + dateISO);
+  const n = parseInt(String(v||'0'), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+function setLiturgiaVariantChoice(dateISO, idx){
+  if (!dateISO) return;
+  localStorage.setItem(LS_LITURGIA_VARIANT_PREFIX + dateISO, String(idx));
+}
+
+
 function __liturgiaLoadCache(){
   try{
     const raw = localStorage.getItem(LS_LITURGIA_CACHE);
@@ -321,7 +334,8 @@ async function ensureLiturgia(dateISO){
           title: data.title || '',
           text: String(data.text||''),
           psalmText: data.psalmText || extracted.psalmText || '',
-          alleluiaVerse: data.alleluiaVerse || extracted.alleluiaVerse || ''
+          alleluiaVerse: data.alleluiaVerse || extracted.alleluiaVerse || '',
+          variants: Array.isArray(data.variants) ? data.variants : null
         };
         __liturgiaPut(dateISO, payload);
         return payload;
@@ -346,8 +360,40 @@ function __liturgiaTextToHTML(txt){
 
 function renderLiturgiaToPanel(dateISO){
   const box = document.getElementById('liturgia-content');
+  const titleEl = document.getElementById('liturgia-title');
+  const sel = document.getElementById('liturgia-variant');
   if (!box) return;
+
   const cached = dateISO ? __liturgiaGet(dateISO) : null;
+
+  // Title
+  if (titleEl){
+    if (cached && cached.title) titleEl.textContent = String(cached.title);
+    else if (dateISO) titleEl.textContent = dateISO;
+    else titleEl.textContent = '';
+  }
+
+  // Variant picker (if available)
+  if (sel){
+    const vars = cached && cached.variants && Array.isArray(cached.variants) ? cached.variants : null;
+    if (vars && vars.length > 1){
+      sel.style.display = 'inline-flex';
+      sel.innerHTML = vars.map((v,i)=>`<option value="${i}">${escapeHtml(String(v && v.label ? v.label : ('Variant ' + (i+1))))}</option>`).join('');
+      const chosen = Math.min(getLiturgiaVariantChoice(dateISO), vars.length-1);
+      sel.value = String(chosen);
+      sel.onchange = () => {
+        const idx = parseInt(sel.value,10);
+        setLiturgiaVariantChoice(dateISO, Number.isFinite(idx)?idx:0);
+        // rerender (affects Aleluja blocks and could affect title in future)
+        renderSong();
+        renderLiturgiaToPanel(dateISO);
+      };
+    } else {
+      sel.style.display = 'none';
+      sel.onchange = null;
+    }
+  }
+
   if (!cached || !cached.text){
     box.innerHTML = '<div class="loading">Načítavam...</div>';
     return;
@@ -370,11 +416,9 @@ function openLiturgiaDatePicker(){
   const inp = document.getElementById('liturgia-date');
   if (!inp) return;
 
-  const isoFromTitle = parseISODateFromDnesTitle(dnesTitle) || null;
   const today = new Date();
   const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-
-  const targetIso = isoFromTitle || inp.value || isoToday;
+  const targetIso = inp.value || isoToday;
   inp.value = targetIso;
 
   // open picker
@@ -697,10 +741,9 @@ function toggleSection(section, expand = null) {
   // auto-load liturgia when opened
   if (section === 'liturgia' && show) {
     const inp = document.getElementById('liturgia-date');
-    const isoFromTitle = parseISODateFromDnesTitle(dnesTitle) || null;
     const today = new Date();
     const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    const iso = (inp && inp.value) ? inp.value : (isoFromTitle || isoToday);
+    const iso = (inp && inp.value) ? inp.value : isoToday;
     if (inp) inp.value = iso;
     // render from cache first, then refresh online
     renderLiturgiaToPanel(iso);
@@ -1995,8 +2038,17 @@ function renderSong() {
     // render song first
     const songHTML = songTextToHTML(text);
 
-    const psalm = cached && cached.psalmText ? String(cached.psalmText) : '';
-    const verse = cached && cached.alleluiaVerse ? String(cached.alleluiaVerse) : '';
+    let psalm = cached && cached.psalmText ? String(cached.psalmText) : '';
+    let verse = cached && cached.alleluiaVerse ? String(cached.alleluiaVerse) : '';
+    const vars = cached && cached.variants && Array.isArray(cached.variants) ? cached.variants : null;
+    if (vars && vars.length){
+      const idx = Math.min(getLiturgiaVariantChoice(iso), vars.length-1);
+      const v = vars[idx] || null;
+      if (v){
+        if (v.psalmText) psalm = String(v.psalmText);
+        if (v.alleluiaVerse) verse = String(v.alleluiaVerse);
+      }
+    }
 
     const psalmHTML = psalm ? `<div class="lit-block"><div class="lit-block-title">ŽALM</div><div class="lit-block-body">${__liturgiaTextToHTML(psalm)}</div></div>` : '';
     const verseHTML = verse ? `<div class="lit-block"><div class="lit-block-title">ALELUJOVÝ VERŠ</div><div class="lit-block-body">${__liturgiaTextToHTML(verse)}</div></div>` : '';
@@ -2577,29 +2629,104 @@ function editSpecialToken(i){
   renderFormModalOrder();
 }
 
+function extractSpecialNotesFromText(origText, kind){
+  const text = String(origText || '');
+  if (!text) return [];
+  const kindUpper = String(kind || '').toUpperCase();
+  const kindSk = (kindUpper === 'PREDOHRA' ? 'Predohra'
+                : (kindUpper === 'MEDZIHRA' ? 'Medzihra'
+                : (kindUpper === 'DOHRA' ? 'Dohra' : 'Poznámka')));
+
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  const label = (kindSk === 'Poznámka' ? '(?:Poznámka|Poznamka)' : kindSk);
+  const labelRe = new RegExp('^\\s*\\[?\\s*' + label + '\\s*\\]?\\s*(?:[:\\-–—])?\\s*(.*)\\s*$', 'i');
+
+  for (let i = 0; i < lines.length; i++){
+    let line = String(lines[i] || '').trim();
+    if (!line) continue;
+
+    // allow forms like "[Predohra: ...]" (whole line wrapped)
+    let candidateLine = line;
+    if (candidateLine.startsWith('[') && candidateLine.endsWith(']') && candidateLine.length > 2){
+      candidateLine = candidateLine.slice(1, -1).trim();
+    }
+
+    const m = candidateLine.match(labelRe);
+    if (!m) continue;
+
+    let note = String(m[1] || '').trim();
+
+    // If label is alone (e.g. "[Predohra]"), take next non-empty line as note
+    if (!note){
+      for (let j = i + 1; j < lines.length; j++){
+        const next = String(lines[j] || '').trim();
+        if (!next) continue;
+        note = next;
+        break;
+      }
+    }
+
+    if (note){
+      // if any trailing bracket left from odd formatting, trim one
+      note = note.replace(/\]$/, '').trim();
+      out.push(note);
+    }
+  }
+
+  // dedupe while preserving order
+  const seen = new Set();
+  return out.filter(x => {
+    const k = String(x || '').trim();
+    if (!k) return false;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 function addSpecialStep(kind){
-  // Ak už existuje, radšej ho uprav
-  const re = new RegExp('^' + String(kind || '').toUpperCase() + '(\\(|$)', 'i');
-  const existingIdx = formModalOrder.findIndex(t => re.test(String(t || '').trim()));
-  if (existingIdx >= 0){
-    editSpecialToken(existingIdx);
+  if (!isAdmin) return;
+  const kindU = String(kind || '').toUpperCase();
+
+  const makeToken = (note) => {
+    const v = String(note || '').trim();
+    return v ? `${kindU}(${v})` : kindU;
+  };
+
+  // Try auto-preset from song text (supports both plain text and chords like [G] [D] ...)
+  let presets = [];
+  const s = songs.find(x => x.id === formModalSongId);
+  if (s && s.origText){
+    presets = extractSpecialNotesFromText(s.origText, kindU);
+  }
+
+  // If there is exactly one match in the song, insert it automatically (can be edited by tapping the chip)
+  if (presets.length === 1){
+    formModalOrder.push(makeToken(presets[0]));
+    renderFormModalOrder();
     return;
   }
 
-  // Predvyplň poznámku z textu piesne, ak existuje "Predohra: ..." atď.
-  let preset = '';
-  const s = songs.find(x => x.id === formModalSongId);
-  if (s && s.origText){
-    const kindSk = (String(kind||'').toUpperCase() === 'PREDOHRA' ? 'Predohra' : (String(kind||'').toUpperCase() === 'MEDZIHRA' ? 'Medzihra' : (String(kind||'').toUpperCase() === 'DOHRA' ? 'Dohra' : 'Poznámka')));
-    const rx = new RegExp('^' + kindSk + '\\s*:\\s*(.*)$', 'im');
-    const m = String(s.origText).match(rx);
-    if (m && m[1]) preset = String(m[1]).trim();
+  // If there are multiple matches, let user choose one
+  if (presets.length > 1){
+    const preview = presets.map((p, idx) => `${idx + 1}) ${p.length > 90 ? (p.slice(0, 87) + '…') : p}`).join('\n');
+    const pick = prompt(`Našiel som viac možností pre ${kindU} v texte piesne.\nVyber číslo alebo zadaj 0 pre vlastný text:\n\n${preview}`, '1');
+    if (pick === null) return;
+    const n = parseInt(String(pick).trim(), 10);
+    if (Number.isFinite(n) && n >= 1 && n <= presets.length){
+      formModalOrder.push(makeToken(presets[n - 1]));
+      renderFormModalOrder();
+      return;
+    }
+    if (String(pick).trim() !== '0') return; // invalid -> cancel
+    // fallthrough to custom
   }
 
-  const note = prompt(`${kind} – poznámka (voliteľné):`, preset);
+  // No preset or user chose custom
+  const note = prompt(`${kindU} – poznámka (voliteľné):`, '');
   if (note === null) return;
-  const token = String(note).trim() ? `${String(kind).toUpperCase()}(${String(note).trim()})` : `${String(kind).toUpperCase()}`;
-  formModalOrder.push(token);
+  formModalOrder.push(makeToken(note));
   renderFormModalOrder();
 }
 
