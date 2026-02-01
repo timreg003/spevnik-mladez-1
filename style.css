@@ -833,71 +833,36 @@ body.present #presentControls{ display:flex; }
 }
 
 
-/* ---- Liturgický kalendár ---- */
-.liturgia-toolbar{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-bottom:10px;
+/* ===== LITURGICKÝ KALENDÁR ===== */
+.lit-box{ padding: 14px 14px 12px; }
+.lit-top{ display:flex; flex-direction:column; gap:10px; }
+.lit-head-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+.lit-date-line{ font-size:18px; font-weight:800; color:#eaeaea; }
+.lit-feast-line{ font-size:14px; color:#bdbdbd; line-height:1.35; flex:1; min-width:220px; text-align:right; }
+.lit-variant-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.lit-variant-label{ font-size:14px; color:#bdbdbd; }
+.lit-variant-select{ flex:1; min-width:220px; padding:10px 12px; border-radius:10px; border:1px solid #2a2a2a; background:#171717; color:#eaeaea; }
+.lit-btn-row{ display:flex; align-items:center; gap:10px; }
+.lit-date-btn{
+  display:inline-flex; align-items:center; gap:10px;
+  padding:10px 14px; border-radius:12px;
+  border:1px solid #2a2a2a; background:#1b1b1b; color:#eaeaea;
+  cursor:pointer; user-select:none;
 }
-.liturgia-btn{
-  display:inline-flex;
-  align-items:center;
-  gap:10px;
-  border:1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.06);
-  color: inherit;
-  padding:10px 12px;
-  border-radius:12px;
-  font-weight:700;
-  cursor:pointer;
-}
-.liturgia-btn i{ font-size:18px; }
-.liturgia-date-input{
+.lit-date-btn:active{ transform: scale(0.99); }
+.lit-date-input{
   position:absolute;
   left:-9999px;
-  width:1px;
-  height:1px;
-  opacity:0;
+  width:1px; height:1px;
+  opacity:0.01;
 }
-.liturgia-content{
-  line-height:1.4;
-}
+.lit-content{ margin-top:4px; padding-top:6px; }
+.lit-reading-title{ margin:14px 0 6px; color:#00bfff; font-weight:900; letter-spacing:0.3px; }
+.lit-reading-text{ white-space:pre-wrap; line-height:1.5; color:#eaeaea; font-size:15px; }
+.lit-error{ color:#777; padding:20px 0; text-align:center; }
 
-/* ---- Žalm + Alelujový verš bloky pri ALELUJA (999) ---- */
-.lit-block{
-  margin: 10px 0 14px;
-  padding: 12px 12px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-}
-.lit-block-title{
-  font-weight:800;
-  letter-spacing:0.06em;
-  font-size: 12px;
-  opacity: 0.85;
-  margin-bottom: 8px;
-}
-.lit-block-body{
-  font-size: 0.98em;
-}
-.lit-block-empty{
-  opacity: 0.75;
-}
-
-
-.liturgia-title{
-  font-weight:800;
-  margin:4px 0 10px;
-  line-height:1.25;
-}
-
-.liturgia-variant{
-  border:1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.06);
-  color: inherit;
-  padding:10px 12px;
-  border-radius:12px;
-  font-weight:700;
-}
+/* ===== ALELUJA (999) selector ===== */
+.ale-lit-selector{ margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; border:1px solid #2a2a2a; background:#151515; }
+.ale-lit-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ale-lit-label{ color:#bdbdbd; font-size:14px; display:flex; align-items:center; gap:10px; }
+.ale-lit-variant-select{ flex:1; min-width:220px; padding:10px 12px; border-radius:10px; border:1px solid #2a2a2a; background:#171717; color:#eaeaea; }
