@@ -592,7 +592,7 @@ renderPlaylistsUI(true);
 }
 
 /* ===== XML LOAD ===== */
-async function parseXML() 
+async function parseXML() {
   // iOS: neblokuj štart čakaním na sieť. Najprv ukáž cache (ak existuje), potom v pozadí obnov.
   const saved = localStorage.getItem('offline_spevnik');
 
