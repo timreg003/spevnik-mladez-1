@@ -592,7 +592,7 @@ renderPlaylistsUI(true);
 }
 
 /* ===== XML LOAD ===== */
-async function parseXML() {
+async async function parseXML() {
   // iOS: neblokuj štart čakaním na sieť. Najprv ukáž cache (ak existuje), potom v pozadí obnov.
   const saved = localStorage.getItem('offline_spevnik');
 
@@ -1054,19 +1054,21 @@ function normalizeSpecialKind(name){
   if (/^predohra$/i.test(t)) return 'Predohra';
   if (/^medzihra$/i.test(t)) return 'Medzihra';
   if (/^dohra$/i.test(t)) return 'Dohra';
+  if (/^ž?alm$/i.test(t) || /^zalm$/i.test(t)) return 'Žalm';
+  if (/^alelujo?v[ýy]\s*ver[sš]$/i.test(t) || /^alelujo?v\s*ver[sš]$/i.test(t) || /^alelujo?v[yý]\s*vers$/i.test(t)) return 'Alelujový verš';
   if (/^pozn[aá]mka$/i.test(t) || /^poznamka$/i.test(t)) return 'Poznámka';
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 }
 
 function parseSpecialWithText(trimmed){
   const t = String(trimmed || '').trim();
-  let m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka)\s*:\s*(.*)$/i);
+  let m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka|Žalm|Zalm|Alelujový verš|Alelujovy vers|Alelujový vers)\s*:\s*(.*)$/i);
   if (m){
     const kind = normalizeSpecialKind(m[1]);
     const rest = (m[2]||'').trim();
     return { kind, rest };
   }
-  m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka)\s+(.*)$/i);
+  m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka|Žalm|Zalm|Alelujový verš|Alelujovy vers|Alelujový vers)\s+(.*)$/i);
   if (m){
     const kind = normalizeSpecialKind(m[1]);
     const rest = (m[2]||'').trim();
@@ -1077,7 +1079,7 @@ function parseSpecialWithText(trimmed){
 
 function parseSpecialMarkerOnly(trimmed){
   const t = String(trimmed || '').trim();
-  const m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka)\s*:?\s*$/i);
+  const m = t.match(/^(Predohra|Medzihra|Dohra|Poznámka|Poznamka|Žalm|Zalm|Alelujový verš|Alelujovy vers|Alelujový vers)\s*:?\s*$/i);
   if (!m) return '';
   return normalizeSpecialKind(m[1]);
 }
@@ -1769,7 +1771,7 @@ function renderSong() {
       const trimmed = (line || '').trim();
 
       const isSpecialLine = /^(Predohra|Medzihra|Dohra)\b/i.test(trimmed);
-      const isSpecialMarkerOnly = /^(Predohra|Medzihra|Dohra|Poznámka|Poznamka)\s*:?\s*$/i.test(trimmed);
+      const isSpecialMarkerOnly = /^(Predohra|Medzihra|Dohra|Poznámka|Poznamka|Žalm|Zalm|Alelujový verš|Alelujovy vers|Alelujový vers)\s*:?\s*$/i.test(trimmed);
 
       // Začiatok špeciálneho bloku: nechaj všetko tak a zapni režim pre následné akordové riadky
       if (isSpecialLine) {
@@ -2359,13 +2361,7 @@ function editSpecialToken(i){
 }
 
 function addSpecialStep(kind){
-  // Ak už existuje, radšej ho uprav
-  const re = new RegExp('^' + String(kind || '').toUpperCase() + '(\\(|$)', 'i');
-  const existingIdx = formModalOrder.findIndex(t => re.test(String(t || '').trim()));
-  if (existingIdx >= 0){
-    editSpecialToken(existingIdx);
-    return;
-  }
+  // Povoliť vložiť aj viackrát (napr. 2× Medzihra)
 
   // Predvyplň poznámku z textu piesne, ak existuje "Predohra: ..." atď.
   let preset = '';
@@ -3739,13 +3735,31 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   const ps = (v && v.psalmText) ? String(v.psalmText).trim() : '';
   const av = (v && v.alleluiaVerse) ? String(v.alleluiaVerse).trim() : '';
 
-  const blocks = [];
-  if (ps) blocks.push(`ŽALM:\n${ps}`);
-  blocks.push(String(alelujaText||'').trim());
-  if (av) blocks.push(`ALELUJOVÝ VERŠ:\n${av}`);
+  const out = [];
+  // Žalm ako samostatný blok PRED piesňou
+  if (ps){
+    out.push('Žalm:');
+    out.push(ps);
+    out.push(''); // medzera medzi blokmi
+  }
 
-  return blocks.filter(Boolean).join('\n\n');
+  // Text Aleluja v strede (nezmenený)
+  out.push(String(alelujaText||'').trim());
+
+  // Alelujový verš ako samostatný blok PO piesni
+  if (av){
+    out.push('');
+    out.push('Alelujový verš:');
+    out.push(av);
+  }
+
+  return out.join('
+').replace(/
+{3,}/g,'
+
+').trim();
 }
+
 
 function setupAlelujaLitControlsIfNeeded(){
   const box = document.getElementById('aleluja-lit-controls');
