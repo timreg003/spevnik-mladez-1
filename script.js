@@ -1,5 +1,5 @@
 /* ✅ ANTI PULL-TO-REFRESH (Android)
-   Zablokuje refresh pri ťahu dole, keď je stránka úplne hore.j
+   Zablokuje refresh pri ťahu dole, keď je stránka úplne hore.
    Nezabíja scroll v listoch (editor-list, list-box, song-content).
 */
 (function preventPullToRefresh(){
