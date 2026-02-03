@@ -3651,8 +3651,10 @@ async function loadLiturgiaForUI(iso, opts){
   const status = document.getElementById('lit-status');
   const content = document.getElementById('lit-content');
 
-  // hneď zbaľ sekciu (aby sa ti nerozvinulo pri načítavaní)
-  try { forceInitialCollapsed(); } catch(e) {}
+  // Zbaľ pri "Aktualizovať" (force), ale NIE pri výbere dňa – inak to na mobile/tablete pôsobí ako refresh.
+  if (force){
+    try { forceInitialCollapsed(); } catch(e) {}
+  }
 
   if (status){
     status.style.display = 'block';
@@ -3780,7 +3782,10 @@ function _litExtractFeastTitle(lines){
   const candidates = lines.slice(0, 18).map(x=>String(x||'').trim()).filter(Boolean);
   const weekRe = /(pondelok|utorok|streda|štvrtok|piatok|sobota|nedeľa|nedela)/i;
   const feastRe = /(týždňa|nedeľa|nedela|v\s+(cezročnom|adventnom|vianočnom|pôstnom|velkonočnom|veľkonočnom)\s+období|slávnosť|sviatok|spomienka|ľubovoľná spomienka|féria)/i;
-  const pick = candidates.find(l => feastRe.test(l)) || candidates.find(l => weekRe.test(l)) || candidates[0] || '';
+  // najprv preferuj celé titulky s "týždňa" / "období" (typicky farebný box)
+  const strong = candidates.find(l => /(týždňa|období|slávnosť|sviatok|spomienka|féria)/i.test(l));
+  // ak sa objaví len samotný názov dňa ("Utorok"), ale hneď neskôr je celý titulok, vezmi ten celý
+  const pick = strong || candidates.find(l => feastRe.test(l)) || candidates.find(l => weekRe.test(l) && l.length > 8) || candidates.find(l => weekRe.test(l)) || candidates[0] || '';
   return pick.trim();
 }
 
@@ -3795,10 +3800,8 @@ function _litDropLeadNoise(lines){
       if (_litLooksLikeSmernica(l)) continue;
       if (_litIsStartOfContent(l)) started = true;
       else {
-        // stále pred obsahom: ignoruj smernice a krátke zvyšky
-        if (l.length <= 8) continue;
-        // ak je to zrejme nadpis dňa, ponechaj ho (pre prípad, že je len raz)
-        out.push(raw);
+        // Všetko pred prvým "Čítanie..." / "Responzóriový žalm" je hlavička stránky (dátum, meniny, nadpisy).
+        // Do chlievikov to nepatrí – nechaj to iba pre header (feastTitle), nie v tele.
         continue;
       }
     }
@@ -3809,6 +3812,21 @@ function _litDropLeadNoise(lines){
     }
   }
   return out;
+}
+
+// Rozdeľ riadok typu "Čítanie ... Mk 5, 21-43" na (nadpis) + (referencia)
+function _litSplitTitleAndRef(line){
+  const s = String(line||'').trim();
+  if (!s) return { title:'', ref:'' };
+  // typické biblické odkazy: "Mk 5, 21-43", "2 Sam 18, 9-10", "Mal 3, 1-4", "Ž 86, 1-2..."
+  const m = s.match(/^(.*?)(\b(?:Ž\s*\d+|(?:[1-3]\s*)?[A-ZÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ][A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽáčďéíĺľňóôŕšťúýž]{0,7})\s+\d[\d\s,\.\-–+]*.*)$/);
+  if (m && m[1] && m[2]){
+    const title = m[1].trim().replace(/[\s—-]+$/,'').trim();
+    const ref = m[2].trim();
+    // ak title vyjde príliš krátke, nechaj pôvodný riadok ako title
+    if (title.length >= 8) return { title, ref };
+  }
+  return { title:s, ref:'' };
 }
 
 function _litFindIndex(lines, re, from=0, to=null){
@@ -3921,26 +3939,19 @@ function _litRenderReadingCard(label, lines){
   const out = [];
   const clean = lines.map(x=>String(x||'')).filter(x=>x!=null);
 
-  // 1) prvý "Čítanie z/zo ..." riadok ako modrý riadok v tele
+  // 1) prvý "Čítanie z/zo ..." riadok (KBS nadpis) a biblický odkaz ako menší riadok
   const h = _litPullFirstHeading(clean, /^Čítanie\s+(z|zo)\b/i);
   let bodyLines = clean.slice();
   let headingLine = '';
+  let refLine = '';
   if (h.idx >= 0){
-    headingLine = h.text;
+    const split = _litSplitTitleAndRef(h.text);
+    headingLine = split.title;
+    refLine = split.ref;
     bodyLines.splice(h.idx,1);
   }
 
-  // 2) malý "komentár" – prvý neprázdny riadok po nadpise, ak je krátky
-  let commentLine = '';
-  for (let i=0;i<bodyLines.length;i++){
-    const l = String(bodyLines[i]||'').trim();
-    if (!l) continue;
-    if (l.length <= 120 && !/^Počuli\s+sme/i.test(l) && !/^R\.?\s*:?/i.test(l) && !/^Responzóriový\s+žalm/i.test(l)){
-      commentLine = l;
-      bodyLines.splice(i,1);
-    }
-    break;
-  }
+  // Poznámka: "malý komentár" (sivé na KBS) je v tejto UI presne biblický odkaz (refLine).
 
   // 3) "Počuli sme ..." nech je modré a oddelené
   let closing = '';
@@ -3953,14 +3964,14 @@ function _litRenderReadingCard(label, lines){
   out.push('<div class="lit-block">');
   out.push(`<div class="lit-h lit-h-center">${escapeHtml(label)}</div>`);
   if (headingLine) out.push(`<div class="lit-line lit-blue">${escapeHtml(headingLine)}</div>`);
-  if (commentLine) out.push(`<div class="lit-line lit-blue lit-small">${escapeHtml(commentLine)}</div>`);
+  if (refLine) out.push(`<div class="lit-line lit-blue lit-small">${escapeHtml(refLine)}</div>`);
   out.push(_litRenderBody(bodyLines));
   if (closing) out.push(`<div class="lit-line lit-blue">${escapeHtml(closing)}</div>`);
   out.push('</div>');
   return out.join('');
 }
 
-function _litRenderPsalmCard(lines){
+function _litRenderPsalmCard(lines, refrainOverride){
   if (!lines || !lines.some(x=>String(x||'').trim())) return '';
   const clean = lines.map(x=>String(x||''));
 
@@ -3976,12 +3987,15 @@ function _litRenderPsalmCard(lines){
     headingLine = String(bodyLines.shift()||'').trim();
   }
 
-  // refrén (R.: ...)
+  // refrén (R.: ...) – na KBS je často v hornej "Ž" sekcii (smernice), nie priamo v texte žalmu.
+  // Preto: 1) skús nájsť v tele, 2) ak nie je, použi override z GAS.
   let refrain = '';
   const rIdx = bodyLines.findIndex(l => /^R\.?\s*:?/i.test(String(l||'').trim()));
   if (rIdx >= 0){
     refrain = String(bodyLines[rIdx]||'').trim();
     bodyLines.splice(rIdx,1);
+  } else if (refrainOverride){
+    refrain = String(refrainOverride).trim();
   }
 
   return [
@@ -4099,6 +4113,14 @@ function renderLitFromData(iso, data){
     const t = (v && v.text) ? String(v.text) : '';
     const parsed = _litSplitIntoSections(t);
 
+    // refrén žalmu – vytiahni z GAS (psalmText) ak je k dispozícii
+    let psalmRefrain = '';
+    try{
+      const pt = (v && v.psalmText) ? String(v.psalmText) : '';
+      const line = pt.split('\n').map(x=>String(x||'').trim()).find(x => /^R\.?\s*:?/i.test(x));
+      if (line) psalmRefrain = line.trim();
+    }catch(e){}
+
     if (many){
       const vt = variantTitle(v) || ('Možnosť ' + (idx+1));
       parts.push(`<div class="lit-variant-title">${escapeHtml(vt.toUpperCase())}</div>`);
@@ -4106,7 +4128,7 @@ function renderLitFromData(iso, data){
 
     // Čítania/žalm/aleluja/evanjelium – v chlievikoch
     parts.push(_litRenderReadingCard('PRVÉ ČÍTANIE', parsed.reading1));
-    parts.push(_litRenderPsalmCard(parsed.psalm));
+    parts.push(_litRenderPsalmCard(parsed.psalm, psalmRefrain));
     if (parsed.reading2 && parsed.reading2.some(x=>String(x||'').trim())){
       parts.push(_litRenderReadingCard('DRUHÉ ČÍTANIE', parsed.reading2));
     }
@@ -4134,25 +4156,150 @@ function initLitCalendarUI(){
   const input = document.getElementById('lit-date-input');
   const btn = document.getElementById('lit-date-btn');
   const sel = document.getElementById('lit-variant-select');
+  const popup = document.getElementById('lit-cal-popup');
 
   if (!input || !btn) return;
+
+  function isTouch(){
+    return (('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+  }
+
+  function openCustomCalendar(initialIso, onPick){
+    if (!popup) return;
+    const todayIso = isoToday();
+    let cur = initialIso || todayIso;
+    let curDate = new Date(cur + 'T00:00:00');
+    let viewY = curDate.getFullYear();
+    let viewM = curDate.getMonth();
+
+    const dow = ['Po','Ut','St','Št','Pi','So','Ne'];
+    const monthNames = ['január','február','marec','apríl','máj','jún','júl','august','september','október','november','december'];
+
+    function isoOf(y,m,d){
+      const mm = String(m+1).padStart(2,'0');
+      const dd = String(d).padStart(2,'0');
+      return `${y}-${mm}-${dd}`;
+    }
+
+    function render(){
+      const first = new Date(viewY, viewM, 1);
+      const last = new Date(viewY, viewM+1, 0);
+      // JS: 0=Ne..6=So, my chceme Po..Ne
+      const jsDow = first.getDay();
+      const offset = (jsDow + 6) % 7; // Po=0
+      const daysInMonth = last.getDate();
+
+      const selectedIso = cur;
+
+      const cells = [];
+      for (let i=0;i<offset;i++) cells.push('<button type="button" class="lit-cal-day is-empty"></button>');
+      for (let d=1; d<=daysInMonth; d++){
+        const iso = isoOf(viewY, viewM, d);
+        const cls = ['lit-cal-day'];
+        if (iso === todayIso) cls.push('is-today');
+        if (iso === selectedIso) cls.push('is-selected');
+        cells.push(`<button type="button" class="${cls.join(' ')}" data-iso="${iso}">${d}</button>`);
+      }
+      const html = [];
+      html.push('<div class="lit-cal-inner" role="dialog" aria-modal="true">');
+      html.push('<div class="lit-cal-head">');
+      html.push('<button type="button" class="lit-cal-nav" data-nav="prev">‹</button>');
+      html.push(`<div class="lit-cal-month">${monthNames[viewM]} ${viewY}</div>`);
+      html.push('<button type="button" class="lit-cal-nav" data-nav="next">›</button>');
+      html.push('</div>');
+      html.push('<div class="lit-cal-grid">');
+      for (const d of dow) html.push(`<div class="lit-cal-dow">${d}</div>`);
+      html.push(cells.join(''));
+      html.push('</div>');
+      html.push('<div class="lit-cal-actions">');
+      html.push('<button type="button" class="btn-neutral" data-action="cancel">Zrušiť</button>');
+      html.push('<button type="button" class="btn-primary" data-action="today">Dnes</button>');
+      html.push('</div>');
+      html.push('</div>');
+      popup.innerHTML = html.join('');
+    }
+
+    function close(){
+      popup.style.display = 'none';
+      popup.setAttribute('aria-hidden','true');
+      popup.innerHTML = '';
+    }
+
+    render();
+    popup.style.display = 'flex';
+    popup.setAttribute('aria-hidden','false');
+
+    // kliky
+    popup.onclick = (ev) => {
+      const t = ev.target;
+      if (!t) return;
+      if (t === popup){ close(); return; }
+      const nav = t.getAttribute('data-nav');
+      if (nav){
+        if (nav === 'prev') viewM -= 1;
+        if (nav === 'next') viewM += 1;
+        if (viewM < 0){ viewM = 11; viewY -= 1; }
+        if (viewM > 11){ viewM = 0; viewY += 1; }
+        render();
+        return;
+      }
+      const action = t.getAttribute('data-action');
+      if (action){
+        if (action === 'cancel'){ close(); return; }
+        if (action === 'today'){
+          cur = todayIso;
+          close();
+          onPick(todayIso);
+          return;
+        }
+      }
+      const iso = t.getAttribute('data-iso');
+      if (iso){
+        cur = iso;
+        close();
+        onPick(iso);
+      }
+    };
+  }
 
   // default dnes
   if (!input.value) input.value = isoToday();
 
-  // klik na tlačidlo – pokus o showPicker (Chrome), inak click na input
-  btn.addEventListener('click', () => {
+  // klik na tlačidlo:
+  // - mobile/tablet: natívny date picker
+  // - PC: ak je k dispozícii showPicker(), použi ho; inak vlastný mini kalendár
+  btn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const iso = input.value || isoToday();
+
+    // najprv skús natívny picker (Chromium + mobile)
+    let usedNative = false;
     try{
-      // Chrome/Edge: showPicker funguje, ak je input viditeľný v DOM
-      if (typeof input.showPicker === 'function') input.showPicker();
-      // fallback: zameraj a vyvolaj natívny picker (niektoré prehliadače blokujú programmatic click)
-      input.focus();
-      input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-      input.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    }catch(e){}
+      if (typeof input.showPicker === 'function'){
+        input.showPicker();
+        usedNative = true;
+      } else if (isTouch()){
+        // na touch zariadeniach často funguje aspoň focus/click
+        input.focus();
+        input.click();
+        usedNative = true;
+      }
+    }catch(e){ usedNative = false; }
+
+    if (!usedNative){
+      openCustomCalendar(iso, (pickedIso) => {
+        input.value = pickedIso;
+        setLitChoiceIndex(pickedIso, 0);
+        loadLiturgiaForUI(pickedIso, {force:false});
+      });
+    }
   });
 
-  input.addEventListener('change', () => {
+  // stop bublanie (aby to nevyzeralo ako "zbalenie" sekcií na touch zariadeniach)
+  input.addEventListener('click', (e)=>{ try{ e.stopPropagation(); }catch(_){} });
+  input.addEventListener('change', (e) => {
+    try{ e.stopPropagation(); }catch(_){}
     setLitChoiceIndex(input.value, 0);
     loadLiturgiaForUI(input.value, {force:false});
   });

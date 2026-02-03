@@ -135,11 +135,13 @@
         <div class="lit-picker">
           <div class="date-btn-wrap">
             <button id="lit-date-btn" class="btn-neutral" type="button"><i class="fas fa-calendar"></i> Vybrať deň</button>
-            <!-- Na PC niektoré prehliadače blokujú programmatic click() na date input.
-                 Preto je input položený priamo na tlačidle (opacity 0), aby klik otvoril picker. -->
-            <input id="lit-date-input" class="date-overlay" type="date" aria-label="Vybrať deň">
+            <!-- Skrytý natívny date input (použijeme na mobile / tam kde je podporovaný picker) -->
+            <input id="lit-date-input" class="lit-date-hidden" type="date" aria-label="Vybrať deň">
           </div>
         </div>
+
+        <!-- Vlastný mini kalendár (fallback na PC, keď natívny picker nefunguje) -->
+        <div id="lit-cal-popup" class="lit-cal-popup" style="display:none;" aria-hidden="true"></div>
 
         <div id="lit-variant-row" class="lit-variant-row" style="display:none;">
           <span class="tiny-label">Možnosť:</span>
