@@ -148,8 +148,8 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v38';
-const APP_CACHE_NAME = 'spevnik-v38';
+const APP_BUILD = 'v56';
+const APP_CACHE_NAME = 'spevnik-v56';
 
 
 const SPEVNIK_XML_CACHE_KEY = 'spevnik-export.xml';
@@ -3636,6 +3636,64 @@ function setLitChoiceIndex(iso, idx){
   try{ localStorage.setItem(litChoiceKey(iso), String(idx)); }catch(e){}
 }
 
+
+// --- Fetch liturgiu cez Google Apps Script (JSONP kvôli CORS) ---
+async function fetchLiturgia(iso){
+  const url = `${SCRIPT_URL}?action=liturgia&den=${encodeURIComponent(iso)}`;
+  return await jsonpRequest(url);
+}
+
+// --- Načítanie liturgie do UI (sekcia Liturgický kalendár) ---
+async function loadLiturgiaForUI(iso, opts){
+  const options = opts || {};
+  const force = !!options.force;
+
+  const status = document.getElementById('lit-status');
+  const content = document.getElementById('lit-content');
+
+  // hneď zbaľ sekciu (aby sa ti nerozvinulo pri načítavaní)
+  try { forceInitialCollapsed(); } catch(e) {}
+
+  if (status){
+    status.style.display = 'block';
+    status.classList.add('loading');
+    status.textContent = 'Načítavam liturgiu...';
+  }
+  if (content && force){
+    content.innerHTML = '';
+  }
+
+  const cached = (!force) ? getCachedLit(iso) : null;
+  if (cached && cached.ok){
+    renderLitFromData(iso, cached);
+    return cached;
+  }
+
+  if (!navigator.onLine){
+    if (status){
+      status.classList.remove('loading');
+      status.textContent = 'Liturgické čítania sa nepodarilo načítať. Skontroluj, či Google Script je publikovaný ako Web app pre „Anyone“ a či je správny link v SCRIPT_URL.';
+    }
+    return cached || { ok:false, error:'offline' };
+  }
+
+  try{
+    const data = await fetchLiturgia(iso);
+    if (data && data.ok){
+      setCachedLit(iso, data);
+      renderLitFromData(iso, data);
+      return data;
+    }
+    throw new Error((data && data.error) ? String(data.error) : 'bad_response');
+  }catch(err){
+    if (status){
+      status.classList.remove('loading');
+      status.textContent = 'Liturgické čítania sa nepodarilo načítať. Skontroluj, či Google Script je publikovaný ako Web app pre „Anyone“ a či je správny link v SCRIPT_URL.';
+    }
+    return { ok:false, error:String(err) };
+  }
+}
+
 function litFeastSummary(variants){
   if (!Array.isArray(variants) || !variants.length) return '';
   function pretty(v){
@@ -4231,7 +4289,7 @@ function setupAlelujaLitControlsIfNeeded(){
   const is999 = currentSong && String(currentSong.originalId||"").replace(/^0+/,'') === '999';
   const isDnes = (currentListSource === 'dnes');
 
-  if (!isAleluja999 || !isDnes){
+  if (!is999 || !isDnes){
     box.style.display = 'none';
     box.innerHTML = '';
     return;
