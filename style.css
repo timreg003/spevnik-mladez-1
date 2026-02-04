@@ -853,6 +853,11 @@ body.present #presentControls{ display:flex; }
   font-weight:700;
   color:#64d6ff;
   font-size:18px;
+  white-space:normal;
+}
+.lit-head-line{
+  display:block;
+  line-height:1.15;
 }
 .lit-head-right{
   font-weight:600;

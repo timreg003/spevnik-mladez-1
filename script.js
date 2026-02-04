@@ -1202,11 +1202,30 @@ function songTextToHTML(text) {
     const litM = trimmed.match(/^\[\[LIT-(PSALM|VERSE|READ2)\|(.*)\]\]$/);
     if (litM){
       // zatvor otvorenú sekciu piesne, nech sa to nemieša s gridom
-      closeSection();
-      pendingLabel = '';
-      pendingSpecial = '';
-      pendingChordLines = [];
-      pendingBlanks = 0;
+      // pred vložením liturgie musíme vypísať akékoľvek rozpracované riadky,
+// inak sa môže stratiť posledná sloha (najmä ak obsahuje iba akordy).
+flushPendingSpecialEmpty();
+if (pendingLabel && pendingChordLines.length) {
+  closeSection();
+  openSection();
+  out.push(songLineHTML(pendingLabel, pendingChordLines[0], 'song-chordline'));
+  for (let k = 1; k < pendingChordLines.length; k++) {
+    out.push(songLineHTML('', pendingChordLines[k], 'song-chordline'));
+  }
+  pendingChordLines.length = 0;
+  pendingLabel = '';
+  closeSection();
+} else if (pendingChordLines.length) {
+  if (!sectionOpen) openSection();
+  for (const cl of pendingChordLines) out.push(songLineHTML('', cl, 'song-chordline'));
+  pendingChordLines.length = 0;
+  closeSection();
+}
+closeSection();
+pendingLabel = '';
+pendingSpecial = '';
+pendingChordLines = [];
+pendingBlanks = 0;
 
       const kind = litM[1];
       let payload = '';
@@ -1229,10 +1248,10 @@ function songTextToHTML(text) {
         const lines = String(payload||'').replace(/\r/g,'').split('\n').map(l=>String(l||'').trim()).filter(Boolean);
         let refrain = '';
         let bodyLines = lines.slice();
-        const rLineIdx = bodyLines.findIndex(l => /^R\.?\s*:?/i.test(l));
+        const rLineIdx = bodyLines.findIndex(l => /^R\s*\.?\s*:\s*\S/.test(l));
         if (rLineIdx >= 0){
           const rLine = bodyLines[rLineIdx];
-          refrain = rLine.replace(/^R\.?\s*:?\s*/i,'').trim();
+          refrain = rLine.replace(/^R\s*\.?\s*:\s*/i,'').trim();
           bodyLines.splice(rLineIdx, 1);
         }
         payload = bodyLines.join('\n').trim();
@@ -2928,14 +2947,23 @@ function renderPlaylistsUI(showEmptyAllowed=true) {
 
 
 async function openPlaylistAndRender(name){
+  // zachovaj pozíciu a stav sekcií – nech to po načítaní playlistu "nezroluje"
+  const y = (() => { try { return window.scrollY || 0; } catch(e){ return 0; } })();
+
   // show loading immediately
   const sect = document.getElementById('playlists-section');
   if (sect) sect.innerHTML = '<div class="loading">Načítavam...</div>';
+
   await fetchPlaylistContent(name);
   playlistViewName = name;
+
+  // uisti sa, že sekcia Playlisty ostane otvorená
   toggleSection('playlists', true);
+
   renderPlaylistsUI(true);
-  window.scrollTo(0,0);
+
+  // obnov scroll (bez skoku na začiatok stránky)
+  try { requestAnimationFrame(() => { try { window.scrollTo(0, y); } catch(e){} }); } catch(e){}
 }
 
 function openPlaylist(nameEnc) {
@@ -3726,17 +3754,26 @@ function litFeastSummary(variants){
   return uniq.join(' / ');
 }
 
-function setLitHeader(iso, feastTitle){
+function setLitHeader(iso, headerBox){
   const left = document.getElementById('lit-head-left');
   const right = document.getElementById('lit-head-right');
   const w = weekdaySkFromISO(iso);
+
   if (left){
-    left.textContent = String(feastTitle || '').trim() || 'Liturgický kalendár';
+    if (Array.isArray(headerBox) && headerBox.length){
+      left.innerHTML = headerBox
+        .map(l => `<div class="lit-head-line">${escapeHtml(String(l||'').trim())}</div>`)
+        .join('');
+    } else {
+      const t = String(headerBox || '').trim();
+      left.textContent = t || 'Liturgický kalendár';
+    }
   }
   if (right){
     right.textContent = `${dmyFromISO(iso)}${w ? ' (' + w.toLowerCase() + ')' : ''}`;
   }
 }
+
 
 // --- Liturgia: robustné rozsekanie "presne podľa KBS" (čo sa dá z textu) ---
 function _litNormalizeText(text){
@@ -3785,8 +3822,8 @@ function _litExtractPsalmRefrainFromHeader(lines, startIdx=0, endIdx=220){
     if (/^Ž\s*\d+\b/.test(a) || /^Responz[óo]riov[ýy]\s+žalm\b/i.test(a)){
       for (let j=i+1;j<=i+3 && j<L.length;j++){
         const b = L[j];
-        if (/^R\.?\s*:?/i.test(b)){
-          let r = b.replace(/^R\.?\s*:?\s*/i,'').trim();
+        if (/^R\s*\.?\s*:\s*\S/i.test(b)){
+          let r = b.replace(/^R\s*\.?\s*:\s*/i,'').trim();
           if (!r) return '';
           if (r.length > 180) return '';
           return 'R.: ' + r;
@@ -3794,9 +3831,9 @@ function _litExtractPsalmRefrainFromHeader(lines, startIdx=0, endIdx=220){
       }
     }
   }
-  const any = L.find(x => /^R\.?\s*:?/i.test(x));
+  const any = L.find(x => /^R\s*\.?\s*:\s*\S/i.test(x));
   if (any){
-    let r = any.replace(/^R\.?\s*:?\s*/i,'').trim();
+    let r = any.replace(/^R\s*\.?\s*:\s*/i,'').trim();
     if (r && r.length > 180) return '';
     return r ? ('R.: ' + r) : '';
   }
@@ -3886,6 +3923,35 @@ function _litExtractFeastTitle(lines){
   return String(best||'').trim();
 }
 
+
+function _litExtractHeaderBoxLines(lines){
+  // Chceme zobraziť celú hlavičku dňa (farebný rámček na KBS) – bez smerníc (checkboxy, biblické odkazy, Ž ...).
+  const slice = _litStripGlobalNoiseLines((lines||[])).slice(0, 260).map(x=>String(x||'').trim());
+  const out = [];
+  for (let i=0;i<slice.length;i++){
+    const t = slice[i];
+    if (!t) continue;
+
+    // hlavička končí pred smernicami / pred prvým obsahom
+    if (_litLooksLikeSmernica(t)) break;
+    if (/^R\s*\.?\s*:\s*\S/i.test(t)) break; // R.: z hlavičkovej Ž sekcie nechceme v titulku
+    if (_litIsStartOfContent(t)) break;
+
+    // vyhoď čisté odrážky/ikonky
+    if (/^[•\-–—]\s*$/.test(t)) continue;
+
+    out.push(t);
+    // ochrana – hlavička je krátka
+    if (out.length >= 8) break;
+  }
+  // fallback – aspoň jeden riadok
+  if (!out.length){
+    const ft = _litExtractFeastTitle(lines);
+    if (ft) return [ft];
+  }
+  return out;
+}
+
 function _litDropLeadNoise(lines){
   const out = [];
   let started = false;
@@ -3936,11 +4002,18 @@ function _litFindIndex(lines, re, from=0, to=null){
 
 function _litSplitIntoSections(text){
   let lines0 = _litStripGlobalNoiseLines(_litLines(text));
-  const feastTitle = _litExtractFeastTitle(lines0);
+  const headerBoxLines = _litExtractHeaderBoxLines(lines0);
+  const feastTitle = (headerBoxLines && headerBoxLines.length) ? headerBoxLines[0] : _litExtractFeastTitle(lines0);
   const psalmRefrain = _litExtractPsalmRefrainFromHeader(lines0, 0, 220);
 
   let lines = lines0.map(l=>String(l||''));
-  if (feastTitle){
+  if (headerBoxLines && headerBoxLines.length){
+    const hb = new Set(headerBoxLines.map(x=>String(x||'').trim()).filter(Boolean));
+    lines = lines.filter(l => {
+      const t = String(l||'').trim();
+      return t && !hb.has(t);
+    });
+  } else if (feastTitle){
     lines = lines.filter(l => String(l||'').trim() && String(l||'').trim() !== feastTitle);
   } else {
     lines = lines.filter(l => String(l||'').trim());
@@ -4006,7 +4079,7 @@ function _litSplitIntoSections(text){
   const alleluia = (idxAlleluia>=0) ? lines.slice(idxAlleluia, Math.max(idxAlleluia,endAlleluia)) : [];
   const gospel = (idxGospel>=0) ? lines.slice(idxGospel) : [];
 
-  return { feastTitle, psalmRefrain, reading1, psalm, reading2, sequence, alleluia, gospel };
+  return { feastTitle, headerBoxLines, psalmRefrain, reading1, psalm, reading2, sequence, alleluia, gospel };
 }
 
 // Rozdeľ jeden deň na viac "omší/variantov" (napr. 25.12, vigília, ráno/večer...) bez hardcodovania názvov.
@@ -4186,7 +4259,7 @@ function _litRenderPsalmCard(lines, refrainOverride){
   // refrén (R.: ...) – na KBS je často v hornej "Ž" sekcii (smernice), nie priamo v texte žalmu.
   // Preto: 1) skús nájsť v tele, 2) ak nie je, použi override z GAS.
   let refrain = '';
-  const rIdx = bodyLines.findIndex(l => /^R\.?\s*:?/i.test(String(l||'').trim()));
+  const rIdx = bodyLines.findIndex(l => /^R\s*\.?\s*:\s*\S/i.test(String(l||'').trim()));
   if (rIdx >= 0){
     refrain = String(bodyLines[rIdx]||'').trim();
     bodyLines.splice(rIdx,1);
@@ -4301,7 +4374,7 @@ function renderLitFromData(iso, data){
 
   const firstText = (variants[0] && variants[0].text) ? String(variants[0].text) : (data && data.text ? String(data.text) : '');
   const baseParsed = _litSplitIntoSections(firstText);
-  setLitHeader(iso, baseParsed.feastTitle);
+  setLitHeader(iso, (baseParsed && baseParsed.headerBoxLines && baseParsed.headerBoxLines.length) ? baseParsed.headerBoxLines : baseParsed.feastTitle);
 
   const parts = [];
   parts.push('<div class="lit-cards">');
@@ -4640,7 +4713,7 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   let psalmBodyOnly = psalmClean;
   if (!refrainLine){
     const plines = psalmClean.split('\n').map(x=>String(x||'').trim()).filter(Boolean);
-    const rIdx = plines.findIndex(l => /^R\.?\s*:?/i.test(l));
+    const rIdx = plines.findIndex(l => /^R\s*\.?\s*:\s*\S/i.test(l));
     if (rIdx >= 0){
       const rLine = plines[rIdx];
       refrainLine = rLine.startsWith('R') ? rLine : ('R.: ' + rLine);
@@ -4649,7 +4722,7 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
     }
   } else {
     // normalizuj prefix
-    if (!/^R\.?\s*:?/i.test(refrainLine)){
+    if (!/^R\s*\.?\s*:\s*/i.test(refrainLine)){
       refrainLine = 'R.: ' + refrainLine;
     }
   }
