@@ -782,7 +782,7 @@ function filterSongs() {
   renderAllSongs();
   // Pozn.: sekciu "Všetky piesne" otvárame iba na focus/typovanie cez event listenery,
   // inak mobilné klávesnice/IME vedia pri každom druhom znaku rozbiť scroll.
-}}
+}
 
 /* ===== SONG DETAIL ===== */
 function openSongById(id, source) {
