@@ -186,6 +186,8 @@ function doGet(e) {
       t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
       t = t.replace(/<\s*script[^>]*>[\s\S]*?<\/\s*script\s*>/gi, "");
       t = t.replace(/<\s*style[^>]*>[\s\S]*?<\/\s*style\s*>/gi, "");
+      // Odstráň <head> (title/meta), aby sa do výsledného textu nedostával názov stránky.
+      t = t.replace(/<\s*head[^>]*>[\s\S]*?<\/\s*head\s*>/gi, "");
       t = t.replace(/<[^>]+>/g, "");
       t = decodeEntities(t);
       t = t.replace(/\n{3,}/g, "\n\n");
