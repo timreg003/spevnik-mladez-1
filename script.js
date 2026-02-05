@@ -4935,7 +4935,7 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   // - alebo priamo v texte žalmu.
   const psalmClean = cleanPsalmText((parsed.psalm||[]).join('\n'));
 
-n('\n'));
+n('\n');
 
   let refrainLine = String(parsed.psalmRefrain||'').trim();
 
