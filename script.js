@@ -148,8 +148,8 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v67';
-const APP_CACHE_NAME = 'spevnik-v67';
+const APP_BUILD = 'v68';
+const APP_CACHE_NAME = 'spevnik-v68';
 
 
 const SPEVNIK_XML_CACHE_KEY = 'spevnik-export.xml';
@@ -4946,9 +4946,18 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   const parsed = _litSplitIntoSections(String(mass.text||''));
 
   // Aklamácia pred evanjeliom (nie vždy "Alelujový verš")
-  const alleluiaLabel = (parsed && parsed.alleluia && parsed.alleluia.length)
-    ? String(parsed.alleluia[0] || '').trim()
-    : '';
+  // Dôležité: label NESMIE obsahovať celý verš (inak sa duplikuje modrý riadok + biely text).
+  function _deriveAclamationLabel(lines){
+    const arr = Array.isArray(lines) ? lines : [];
+    // preskoč hlavičky
+    const first = arr.map(x=>String(x||'').trim()).find(l => l && !/^(Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom)\b/i.test(l)) || '';
+    if (!first) return 'Aleluja';
+    if (/^(Chvála\s+ti|Sláva\s+ti|Česť\s+a\s+sláva)\b/i.test(first)) return first;
+    // najčastejší prípad: "Aleluja, aleluja..." -> label len "Aleluja"
+    if (/^Aleluja\b/i.test(first)) return 'Aleluja';
+    return 'Aleluja';
+  }
+  const alleluiaLabel = _deriveAclamationLabel(parsed && parsed.alleluia);
 
   // Žalm + refrén (R.: ...) – refrén môže byť:
   // - v "Ž" smernici hore (parsed.psalmRefrain z hlavičky dňa),
@@ -5030,8 +5039,11 @@ function setupAlelujaLitControlsIfNeeded(){
 
   if (!is999 || !titleIsAleluja || !isDnes || !isAdmin){
     box.innerHTML = '';
+    box.style.display = 'none';
     return;
   }
+
+  box.style.display = 'block';
 
   // ISO dátum z názvu priečinka (dnesTitle býva napr. "2026-02-07")
   const mIso = String(dnesTitle||'').match(/\b(\d{4}-\d{2}-\d{2})\b/);
