@@ -148,8 +148,8 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v78';
-const APP_CACHE_NAME = 'spevnik-v78';
+const APP_BUILD = 'v79';
+const APP_CACHE_NAME = 'spevnik-v79';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -535,6 +535,49 @@ function buildDiagnosticsText(){
   lines.push(`UA: ${ua}`);
   return lines.join('\n');
 }
+
+async function appendDiagnosticsExtras(){
+  const ta = document.getElementById('diag-text');
+  if (!ta) return;
+
+  const extra = [];
+  try{
+    if (window.caches && caches.keys){
+      const keys = await caches.keys();
+      extra.push(`CacheKeys: ${keys.length ? keys.join(', ') : '-'}`);
+    }
+  }catch(e){
+    extra.push(`CacheKeys: error`);
+  }
+
+  try{
+    if (navigator.serviceWorker){
+      const ctl = navigator.serviceWorker.controller;
+      extra.push(`SW controller: ${ctl && ctl.scriptURL ? ctl.scriptURL : '-'}`);
+      if (navigator.serviceWorker.getRegistrations){
+        const regs = await navigator.serviceWorker.getRegistrations();
+        const urls = regs.map(r => (r.active && r.active.scriptURL) || (r.waiting && r.waiting.scriptURL) || (r.installing && r.installing.scriptURL)).filter(Boolean);
+        extra.push(`SW registrations: ${urls.length ? urls.join(' | ') : '-'}`);
+      }
+    }
+  }catch(e){
+    extra.push(`SW: error`);
+  }
+
+  try{
+    const den = localStorage.getItem('lit_last_den') || '-';
+    const src = localStorage.getItem('lit_last_src') || '-';
+    const at = parseInt(localStorage.getItem('lit_last_at')||'0',10) || 0;
+    const len = localStorage.getItem('lit_last_len') || '-';
+    extra.push(`Liturgia: den=${den}`);
+    extra.push(`Liturgia: src=${src} at=${fmtDateTime(at)} len=${len}`);
+  }catch(e){}
+
+  if (extra.length){
+    ta.value = ta.value + `\n` + extra.join('\n');
+  }
+}
+
 function openDiagnostics(){
   closeFabMenu();
   const modal = document.getElementById('diag-modal');
@@ -542,6 +585,8 @@ function openDiagnostics(){
   const txt = buildDiagnosticsText();
   const ta = document.getElementById('diag-text');
   if (ta) ta.value = txt;
+  // doplň extra info (SW/cache/liturgia)
+  try{ appendDiagnosticsExtras(); }catch(e){}
   const summary = document.getElementById('diag-summary');
   if (summary){
     const online = navigator.onLine;
@@ -3966,6 +4011,16 @@ async function fetchLiturgia(iso){
   return await jsonpRequest(url);
 }
 
+function _setLitDiag(iso, src, data){
+  try{
+    const text = String((data && (data.text || (data.variants && data.variants[0] && data.variants[0].text))) || '');
+    localStorage.setItem('lit_last_den', String(iso||''));
+    localStorage.setItem('lit_last_src', String(src||''));
+    localStorage.setItem('lit_last_at', String(Date.now()));
+    localStorage.setItem('lit_last_len', String(text.length || 0));
+  }catch(e){}
+}
+
 // --- Načítanie liturgie do UI (sekcia Liturgický kalendár) ---
 async function loadLiturgiaForUI(iso, opts){
   const options = opts || {};
@@ -3993,6 +4048,7 @@ async function loadLiturgiaForUI(iso, opts){
   // rýchle zobrazenie z cache + tichý refresh z internetu (ak sme online)
   if (cached && cached.ok && !force){
     renderLitFromData(iso, cached);
+    _setLitDiag(iso, 'cache', cached);
 
     if (navigator.onLine){
       // ak v cache chýbajú telá čítaní (niekedy sa uložila "skrátená" verzia), prepíš to novým fetchom
@@ -4000,19 +4056,36 @@ async function loadLiturgiaForUI(iso, opts){
       const cachedLooksShort = (!cachedText) || cachedText.length < 4000 || (/\bČítanie\b/i.test(cachedText) && !/Počuli\s+sme\b/i.test(cachedText));
 
       // refresh vždy, ale pri krátkom obsahu agresívnejšie (prepíše UI)
-      (async () => {
-        try{
-          const fresh = await fetchLiturgia(iso);
-          if (fresh && fresh.ok){
-            const freshText = String((fresh.text || (fresh.variants && fresh.variants[0] && fresh.variants[0].text)) || '');
-            if (freshText && (!cachedText || freshText.length > cachedText.length + 50 || cachedLooksShort)){
-              setCachedLit(iso, fresh);
-              renderLitFromData(iso, fresh);
-            }
-          }
-        }catch(e){}
-      })();
+
+if (cachedLooksShort){
+  // pri krátkom obsahu dotiahni plnú liturgiu hneď (nie len na pozadí)
+  try{
+    const fresh = await fetchLiturgia(iso);
+    if (fresh && fresh.ok){
+      const freshText = String((fresh.text || (fresh.variants && fresh.variants[0] && fresh.variants[0].text)) || '');
+      if (freshText && (!cachedText || freshText.length > cachedText.length + 50)){
+        setCachedLit(iso, fresh);
+        renderLitFromData(iso, fresh);
+        _setLitDiag(iso, 'network', fresh);
+      }
     }
+  }catch(e){}
+} else {
+  // tichý refresh (len cache)
+  (async () => {
+    try{
+      const fresh = await fetchLiturgia(iso);
+      if (fresh && fresh.ok){
+        const freshText = String((fresh.text || (fresh.variants && fresh.variants[0] && fresh.variants[0].text)) || '');
+        if (freshText && (!cachedText || freshText.length > cachedText.length + 50)){
+          setCachedLit(iso, fresh);
+          _setLitDiag(iso, 'network', fresh);
+        }
+      }
+    }catch(e){}
+  })();
+}
+
     return cached;
   }
 
@@ -4029,6 +4102,7 @@ async function loadLiturgiaForUI(iso, opts){
     if (data && data.ok){
       setCachedLit(iso, data);
       renderLitFromData(iso, data);
+      _setLitDiag(iso, 'network', data);
       return data;
     }
     throw new Error((data && data.error) ? String(data.error) : 'bad_response');
@@ -4347,22 +4421,34 @@ function _litReadingHasBody(readingLines){
     const t = _litKeyLine(lines[start]);
     if (!t) { start++; continue; }
     if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) { start++; continue; }
-    // súradnice typu "Iz 58, 7-10" alebo "1 Kor 9, 16-23"
-    if (t.length <= 45 && /\d/.test(t) && /^[0-3]?\s*[A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽŽ]{1,10}\s*\d+\s*,\s*\d+/.test(t)) { start++; continue; }
+    if (t.length <= 60 && /\d/.test(t) && /^[0-3]?\s*[A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽŽ]{1,12}\s*\d+\s*,\s*\d+/.test(t)) { start++; continue; }
     break;
   }
+
+  let bodyChars = 0;
+  let bodyLines = 0;
 
   for (let i=start; i<lines.length; i++){
     const t = _litKeyLine(lines[i]);
     if (!t) continue;
 
-    // ak je to už ďalší nadpis sekcie, nie je to telo
-    if (/^(Responzóriový\s+žalm|Žalm|Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom|Sekvencia|Aleluja|Chvála\s+ti|Sláva\s+ti|Evanjelium|Počuli\s+sme)\b/i.test(t)) continue;
+    // ak je to ďalší nadpis sekcie a ešte sme nevideli telo -> prehľad
+    if (/^(Responzóriový\s+žalm|Žalm|Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom|Sekvencia|Aleluja|Chvála\s+ti|Sláva\s+ti|Evanjelium|Počuli\s+sme)\b/i.test(t)){
+      return bodyChars >= 40;
+    }
 
-    // reálne telo má aspoň nejaký text (nemusí byť dlhý na jeden riadok – často je zalomený)
-    if (t.length >= 18) return true;
+    // preskoč súradnicové riadky
+    if (t.length <= 60 && /\d/.test(t) && /^[0-3]?\s*[A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽŽ]{1,12}\s*\d+\s*,\s*\d+/.test(t)) continue;
+
+    bodyChars += t.length;
+    bodyLines++;
+
+    if (/[.!?:;]/.test(t) && bodyChars >= 25) return true;
+    if (bodyChars >= 60) return true;
+    if (bodyLines >= 3 && bodyChars >= 35) return true;
   }
-  return false;
+
+  return bodyChars >= 40;
 }
 
 function _litSplitIntoSections(text){
@@ -5025,6 +5111,7 @@ function initLitCalendarUI(){
       const cached = getCachedLit(iso);
       if (cached && cached.ok){
         renderLitFromData(iso, cached);
+    _setLitDiag(iso, 'cache', cached);
       }
       // ak je otvorená Aleluja 999, prepočítaj
       try{ if (currentSong && String(currentSong.originalId||"").replace(/^0+/,'')==='999') renderSong(); }catch(e){}
