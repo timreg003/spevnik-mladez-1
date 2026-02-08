@@ -148,7 +148,7 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v72';
+const APP_BUILD = 'v73';
 const APP_CACHE_NAME = 'spevnik-v69';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
@@ -4188,6 +4188,100 @@ function _litIsStartOfContent(line){
   );
 }
 
+// --- v73: Prefer full-text first reading over short "overview" (title + coords only) ---
+function _litTrim(s){ return String(s || '').trim(); }
+
+function _litIsSectionHeading(line){
+  const t = _litTrim(line);
+  if (!t) return false;
+  return (
+    /^(Čítanie|Začiatok|Koniec)\b/i.test(t) ||
+    /^Responzóriový\s+žalm\b/i.test(t) ||
+    /^Žalm\b/i.test(t) ||
+    /^Ž\s*\d+\b/i.test(t) ||
+    /^Sekvencia\b/i.test(t) ||
+    /^(Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom)\b/i.test(t) ||
+    /^Aleluja\b/i.test(t) ||
+    /^Chvála\s+ti\b/i.test(t) ||
+    /^Sláva\s+ti\b/i.test(t) ||
+    /^Evanjelium\b/i.test(t) ||
+    /^Počuli\s+sme\b/i.test(t)
+  );
+}
+
+function _litIsPsalmHeading(line){
+  const t = _litTrim(line);
+  return (/^Responzóriový\s+žalm\b/i.test(t) || /^Žalm\b/i.test(t) || /^Ž\s*\d+\b/i.test(t));
+}
+
+function _litIsGospelHeading(line){
+  const t = _litTrim(line);
+  return (
+    /^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i.test(t) ||
+    /^Čítanie\s+zo\s+svätého\s+evanjelia\b/i.test(t) ||
+    /^Začiatok\s+(zo\s+svätého\s+Evanjelia|zo\s+svätého\s+evanjelia|svätého\s+Evanjelia|svätého\s+evanjelia)\b/i.test(t) ||
+    /^Koniec\s+(zo\s+svätého\s+Evanjelia|zo\s+svätého\s+evanjelia|svätého\s+Evanjelia|svätého\s+evanjelia)\b/i.test(t) ||
+    /^Evanjelium\b/i.test(t)
+  );
+}
+
+function _litIsReadingHeading(line){
+  const t = _litTrim(line);
+  if (!t) return false;
+  if (_litIsGospelHeading(t)) return false;
+  return (/^(Čítanie|Začiatok|Koniec)\b/i.test(t));
+}
+
+// Heuristic: block contains real reading body (not only title + coords)
+function _litBlockHasRealBody(blockLines){
+  const lines = (blockLines || []).map(_litTrim).filter(Boolean);
+  if (!lines.length) return false;
+
+  // If it contains the closing formula, it's full text
+  if (lines.some(l => /^Počuli\s+sme\b/i.test(l))) return true;
+
+  // Remove obvious coordinates-only lines and very short headings
+  const content = lines.filter(l => {
+    if (_litIsReadingHeading(l) && l.length < 60) return false;
+    // coordinates like "1 Kr 3, 4-13" or "1Kr 3,4-13"
+    if (/^\d?\s*[A-Za-zÁ-Žá-ž]+\s*\d+\s*,\s*\d+/i.test(l) && l.length < 40) return false;
+    if (/^\(?\s*\d+\s*[A-Za-zÁ-Žá-ž]{1,8}\s*\d+\s*,\s*\d+/i.test(l) && l.length < 50) return false;
+    return true;
+  });
+
+  const body = content.join(' ').replace(/\s+/g,' ').trim();
+  if (body.length >= 220) return true;
+  if (/[.!?]/.test(body) && body.length >= 140) return true;
+  if (content.length >= 4 && body.length >= 160) return true;
+  return false;
+}
+
+// Finds the first full-text first reading; skips short overview blocks
+function findFullFirstReading(lines){
+  const L = (lines || []).map(x => String(x||''));
+  for (let i=0; i<L.length; i++){
+    const t = _litTrim(L[i]);
+    if (!t) continue;
+
+    // stop if we already reached psalm/gospel without a full reading
+    if (_litIsPsalmHeading(t) || _litIsGospelHeading(t)) break;
+
+    if (_litIsReadingHeading(t)){
+      const block = [];
+      for (let j=i; j<L.length; j++){
+        const tj = _litTrim(L[j]);
+        if (j>i && tj && _litIsSectionHeading(tj)) break;
+        block.push(L[j]);
+      }
+      if (_litBlockHasRealBody(block)){
+        return { start: i, blockLines: block };
+      }
+      // else: skip and keep searching further (the full text is often later on the page)
+    }
+  }
+  return { start: -1, blockLines: [] };
+}
+
 function _litExtractFeastTitle(lines){
   const slice = _litStripGlobalNoiseLines((lines||[])).slice(0, 260).map(x=>String(x||'').trim()).filter(Boolean);
   if (!slice.length) return '';
@@ -4244,9 +4338,7 @@ function _litExtractFeastTitle(lines){
       best = l; bestScore = sc;
     }
   }
-  const __best = String(best||'').trim();
-  if (__best && _litIsStartOfContent(__best)) return '';
-  return __best;
+  return String(best||'').trim();
 }
 
 
@@ -4274,7 +4366,7 @@ function _litExtractHeaderBoxLines(lines){
   // fallback – aspoň jeden riadok
   if (!out.length){
     const ft = _litExtractFeastTitle(lines);
-    if (ft && !_litIsStartOfContent(ft) && !_litLooksLikeReadingCoords(ft)) return [ft];
+    if (ft) return [ft];
   }
   return out;
 }
@@ -4347,6 +4439,14 @@ function _litSplitIntoSections(text){
   }
 
   lines = _litDropLeadNoise(lines);
+
+  // v73: If the page starts with an overview (only title + coords), skip to the first full-text first reading
+  try{
+    const r1 = findFullFirstReading(lines);
+    if (r1 && r1.start > 0){
+      lines = lines.slice(r1.start);
+    }
+  }catch(e){}
 
   const idxPsalm = (() => {
     let i = _litFindIndex(lines, /^Responzóriový\s+žalm\b/i, 0);
