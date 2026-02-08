@@ -148,7 +148,7 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v73';
+const APP_BUILD = 'v74';
 const APP_CACHE_NAME = 'spevnik-v69';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
@@ -4188,7 +4188,7 @@ function _litIsStartOfContent(line){
   );
 }
 
-// --- v73: Prefer full-text first reading over short "overview" (title + coords only) ---
+// --- v74: Prefer full-text first reading over short "overview" blocks ---
 function _litTrim(s){ return String(s || '').trim(); }
 
 function _litIsSectionHeading(line){
@@ -4440,43 +4440,107 @@ function _litSplitIntoSections(text){
 
   lines = _litDropLeadNoise(lines);
 
-  // v73: If the page starts with an overview (only title + coords), skip to the first full-text first reading
+  // v74: KBS má hore často prehľad (súradnice + alelujový verš) a až nižšie plný text.
+  // Aby sa "PRVÉ ČÍTANIE" nikdy neodrezalo na nadpise+súradnici, vyrežeme 1. čítanie podľa
+  // zakončenia "Počuli sme ..." (ak existuje) – nie podľa toho, kde sa prvýkrát objaví Žalm.
+  // Tým pádom sa do 1. čítania vždy dostane aj celý text (ako na KBS).
+  let r1EndAbs = -1;
   try{
-    const r1 = findFullFirstReading(lines);
-    if (r1 && r1.start > 0){
-      lines = lines.slice(r1.start);
+    // nájdi prvý začiatok čítania (nie evanjelium)
+    let r1StartAbs = -1;
+    for (let i=0;i<lines.length;i++){
+      const t = String(lines[i]||'').trim();
+      if (!t) continue;
+      if (_litIsGospelHeading(t)) continue;
+      if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) { r1StartAbs = i; break; }
+    }
+    if (r1StartAbs >= 0){
+      // nájdi prvé "Počuli sme ..." po začiatku (v rámci primeraného okna)
+      const lim = Math.min(lines.length, r1StartAbs + 260);
+      for (let j=r1StartAbs+1; j<lim; j++){
+        const tj = String(lines[j]||'').trim();
+        if (!tj) continue;
+        if (/^Počuli\s+sme\b/i.test(tj)) { r1EndAbs = j+1; break; }
+      }
+      // ak sa nenašlo "Počuli sme", nech je aspoň blok po prvý výskyt žalmu/sekcie
+      if (r1EndAbs < 0){
+        for (let j=r1StartAbs+1; j<lim; j++){
+          const tj = String(lines[j]||'').trim();
+          if (!tj) continue;
+          if (_litIsSectionHeading(tj) && !_litIsReadingHeading(tj)) { r1EndAbs = j; break; }
+        }
+      }
+      // ak čítanie vyšlo extrémne krátke (len 1-2 riadky), skús nájsť ďalší výskyt "Čítanie" nižšie
+      if (r1EndAbs > 0){
+        const block = lines.slice(r1StartAbs, r1EndAbs);
+        if (!_litBlockHasRealBody(block)){
+          // pokračuj nižšie – plný text býva až pod prehľadom
+          for (let i=r1StartAbs+1;i<lines.length;i++){
+            const t = String(lines[i]||'').trim();
+            if (!t) continue;
+            if (_litIsGospelHeading(t)) continue;
+            if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) {
+              // zopakuj hľadanie konca
+              const lim2 = Math.min(lines.length, i + 260);
+              let end2 = -1;
+              for (let j=i+1;j<lim2;j++){
+                const tj = String(lines[j]||'').trim();
+                if (!tj) continue;
+                if (/^Počuli\s+sme\b/i.test(tj)) { end2 = j+1; break; }
+              }
+              if (end2 > 0){
+                const b2 = lines.slice(i, end2);
+                if (_litBlockHasRealBody(b2)) { lines = lines.slice(i); r1EndAbs = end2 - i; }
+              }
+              break;
+            }
+          }
+        }
+      }
     }
   }catch(e){}
 
+  // Ak sme našli koniec 1. čítania, rozdeľ tail až po ňom (indexy ďalších sekcií budú voči tail)
+  let headReading1 = null;
+  let tail = lines;
+  if (r1EndAbs > 0){
+    headReading1 = lines.slice(0, r1EndAbs);
+    tail = lines.slice(r1EndAbs);
+  }
+
+  // Ďalšie sekcie počítame už iba z "tail" (teda za 1. čítaním), aby žiadne prehľadové riadky
+  // z úvodu nemohli predčasne odseknúť 1. čítanie.
+  const base = tail;
+
   const idxPsalm = (() => {
-    let i = _litFindIndex(lines, /^Responzóriový\s+žalm\b/i, 0);
-    if (i < 0) i = _litFindIndex(lines, /^Žalm\b/i, 0);
-    if (i < 0) i = _litFindIndex(lines, /^Ž\s*\d+\b/i, 0);
+    let i = _litFindIndex(base, /^Responzóriový\s+žalm\b/i, 0);
+    if (i < 0) i = _litFindIndex(base, /^Žalm\b/i, 0);
+    if (i < 0) i = _litFindIndex(base, /^Ž\s*\d+\b/i, 0);
     return i;
   })();
 
   const idxGospel = (() => {
-    let i = _litFindIndex(lines, /^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Čítanie\s+zo\s+svätého\s+evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Začiatok\s+(zo\s+svätého\s+)?Evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Začiatok\s+(zo\s+svätého\s+)?evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Koniec\s+(zo\s+svätého\s+)?Evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Koniec\s+(zo\s+svätého\s+)?evanjelia\b/i, 0);
-    if (i<0) i = _litFindIndex(lines, /^Evanjelium\b/i, 0);
+    let i = _litFindIndex(base, /^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Čítanie\s+zo\s+svätého\s+evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Začiatok\s+(zo\s+svätého\s+)?Evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Začiatok\s+(zo\s+svätého\s+)?evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Koniec\s+(zo\s+svätého\s+)?Evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Koniec\s+(zo\s+svätého\s+)?evanjelia\b/i, 0);
+    if (i<0) i = _litFindIndex(base, /^Evanjelium\b/i, 0);
     return i;
   })();
 
   const searchStart = (idxPsalm>=0) ? idxPsalm : 0;
-  let idxAlleluia = _litFindIndex(lines, /^(Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom)\b/i, searchStart);
+  let idxAlleluia = _litFindIndex(base, /^(Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom)\b/i, searchStart);
   if (idxAlleluia < 0 && idxGospel >= 0){
-    idxAlleluia = _litFindIndex(lines, /^(Aleluja\b|Chvála\s+ti\b|Sláva\s+ti\b)/i, searchStart, idxGospel);
+    idxAlleluia = _litFindIndex(base, /^(Aleluja\b|Chvála\s+ti\b|Sláva\s+ti\b)/i, searchStart, idxGospel);
   }
 
   let idxRead2 = -1;
   if (idxPsalm >= 0){
-    const lim = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length);
+    const lim = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length);
     for (let i=idxPsalm+1;i<lim;i++){
-      const l = String(lines[i]||'').trim();
+      const l = String(base[i]||'').trim();
       if (/^(Čítanie|Začiatok|Koniec)\b/i.test(l) &&
           !/^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i.test(l) &&
           !/^Čítanie\s+zo\s+svätého\s+evanjelia\b/i.test(l)){
@@ -4488,27 +4552,28 @@ function _litSplitIntoSections(text){
 
   let idxSeq = -1;
   const seqStart = (idxRead2>=0) ? idxRead2 : (idxPsalm>=0 ? idxPsalm : 0);
-  const seqEnd = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length);
+  const seqEnd = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length);
   for (let i=seqStart;i<seqEnd;i++){
-    const l = String(lines[i]||'').trim();
+    const l = String(base[i]||'').trim();
     if (/^Sekvencia\b/i.test(l)){
       idxSeq = i;
       break;
     }
   }
 
-  const end1 = (idxPsalm>=0) ? idxPsalm : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length));
-  const endPsalm = (idxRead2>=0) ? idxRead2 : (idxSeq>=0 ? idxSeq : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length)));
-  const endRead2 = (idxSeq>=0) ? idxSeq : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length));
-  const endSeq = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : lines.length);
-  const endAlleluia = (idxGospel>=0) ? idxGospel : lines.length;
+  const end1 = (idxPsalm>=0) ? idxPsalm : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length));
+  const endPsalm = (idxRead2>=0) ? idxRead2 : (idxSeq>=0 ? idxSeq : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length)));
+  const endRead2 = (idxSeq>=0) ? idxSeq : (idxAlleluia>=0 ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length));
+  const endSeq = (idxAlleluia>=0) ? idxAlleluia : (idxGospel>=0 ? idxGospel : base.length);
+  const endAlleluia = (idxGospel>=0) ? idxGospel : base.length;
 
-  const reading1 = lines.slice(0, Math.max(0,end1));
-  const psalm = (idxPsalm>=0) ? lines.slice(idxPsalm, Math.max(idxPsalm,endPsalm)) : [];
-  const reading2 = (idxRead2>=0) ? lines.slice(idxRead2, Math.max(idxRead2,endRead2)) : [];
-  const sequence = (idxSeq>=0) ? lines.slice(idxSeq, Math.max(idxSeq,endSeq)) : [];
-  const alleluia = (idxAlleluia>=0) ? lines.slice(idxAlleluia, Math.max(idxAlleluia,endAlleluia)) : [];
-  const gospel = (idxGospel>=0) ? lines.slice(idxGospel) : [];
+  // ak sme vedeli určiť 1. čítanie podľa "Počuli sme", použijeme to, inak staré delenie
+  const reading1 = headReading1 ? headReading1 : base.slice(0, Math.max(0,end1));
+  const psalm = (idxPsalm>=0) ? base.slice(idxPsalm, Math.max(idxPsalm,endPsalm)) : [];
+  const reading2 = (idxRead2>=0) ? base.slice(idxRead2, Math.max(idxRead2,endRead2)) : [];
+  const sequence = (idxSeq>=0) ? base.slice(idxSeq, Math.max(idxSeq,endSeq)) : [];
+  const alleluia = (idxAlleluia>=0) ? base.slice(idxAlleluia, Math.max(idxAlleluia,endAlleluia)) : [];
+  const gospel = (idxGospel>=0) ? base.slice(idxGospel) : [];
 
   return { feastTitle, headerBoxLines, psalmRefrain, reading1, psalm, reading2, sequence, alleluia, gospel };
 }
