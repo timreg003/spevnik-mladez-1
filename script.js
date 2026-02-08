@@ -157,8 +157,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v86';
-const APP_CACHE_NAME = 'spevnik-v86';
+const APP_BUILD = 'v87';
+const APP_CACHE_NAME = 'spevnik-v87';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -4991,6 +4991,7 @@ function _litKbsLikeHtmlFromText(rawText){
   let html = '<div class="kbs-like">';
   let inPsalm = false;
   let lastH4 = '';
+  let afterVerse = false;
 
   function esc(x){ return escapeHtml(String(x||'')); }
 
@@ -5011,18 +5012,48 @@ function _litKbsLikeHtmlFromText(rawText){
     }
     if (/^#{4}\s+/.test(line)){
       const h = line.replace(/^#{4}\s+/, '').trim();
+
       const isGospel = /^Evanjelium\b/i.test(h);
-      const prevWasVerse = /(\bverš\b|aklamáci)/i.test(String(lastH4||''));
-      if (isGospel && prevWasVerse){
+      const prevWasVerseH4 = /(\bverš\b|aklamáci|aleluja)/i.test(String(lastH4||''));
+      if (isGospel && (prevWasVerseH4 || afterVerse)){
         // medzi veršom/aklamáciou a evanjeliom nech sú dva prázdne riadky
         html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
       }
+
       inPsalm = /^Responzóriový\s+žalm\b/i.test(h);
+      afterVerse = /(\bverš\b|aklamáci|aleluja)/i.test(h);
       lastH4 = h;
+
       html += '<div class="kbs-h4">'+esc(h)+'</div>';
       continue;
     }
 
+
+    // krátka veta pod nadpisom (sivé, menšie, kurzíva)
+    // typicky je to 1 riadok medzi nadpisom (####) a "Čítanie z ..."
+    {
+      const t = String(line||'').trim();
+      if (!inPsalm && t && !/^#/.test(t) && !/^Čítanie\b/i.test(t) && !/^Počuli\s+sme\b/i.test(t)){
+        // nájdi ďalší ne-prázdny riadok
+        let j = i+1;
+        let next = '';
+        while (j < lines.length){
+          const nx = String(lines[j]||'').trim();
+          if (nx){ next = nx; break; }
+          j++;
+        }
+        if (next && /^Čítanie\b/i.test(next) && (lastH4 || /^#{4}\s+/.test(String(lines[i-1]||'')))){
+          html += '<div class="kbs-brief">'+esc(t)+'</div>';
+          continue;
+        }
+      }
+    }
+
+    // Ak "Čítanie zo svätého Evanjelia" príde ako bežný riadok (nie nadpis), vlož medzeru po aleluja/verši
+    if (afterVerse && /Čítanie\s+zo\s+svätého\s+Evanjelia/i.test(line.trim())){
+      html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
+      afterVerse = false;
+    }
     // responses
     if (/^Počuli\s+sme\b/i.test(line)){
       html += '<div class="kbs-response">'+esc(line)+'</div>';
@@ -5049,6 +5080,16 @@ function renderLitFromData(iso, data){
   const sel = document.getElementById('lit-variant-select');
 
   const variants = (data && Array.isArray(data.variants)) ? data.variants : [];
+
+  // hlavička (ponechať ako pôvodne)
+  const firstText = (variants[0] && variants[0].text) ? String(variants[0].text) : (data && data.text ? String(data.text) : '');
+  try{
+    const baseParsed = _litSplitIntoSections(firstText);
+    setLitHeader(iso, (baseParsed && baseParsed.headerBoxLines && baseParsed.headerBoxLines.length) ? baseParsed.headerBoxLines : baseParsed.feastTitle);
+  }catch(e){
+    // fallback
+    setLitHeader(iso, 'Liturgický kalendár');
+  }
 
   // selector v Liturgickom kalendári nepoužívame (len zobrazíme "KBS-look" pre hlavný deň)
   if (row) row.style.display = 'none';
