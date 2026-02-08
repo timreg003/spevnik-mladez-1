@@ -158,8 +158,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v92';
-const APP_CACHE_NAME = 'spevnik-v92';
+const APP_BUILD = 'v93';
+const APP_CACHE_NAME = 'spevnik-v93';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -388,6 +388,27 @@ function normText(s){
     .replace(/[\u0300-\u036f]/g,'');
 }
 
+
+function normSearch(s){
+  // lowercase + remove diacritics + replace punctuation with spaces (order-insensitive token matching)
+  return normText(s)
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function splitSearchTokens(q){
+  const n = normSearch(q);
+  return n ? n.split(' ').filter(Boolean) : [];
+}
+
+function _containsSearchToken(text, tok){
+  if (!tok) return true;
+  if (tok.length >= 3) return text.indexOf(tok) !== -1;
+  // very short tokens: try word boundary-ish match
+  const re = new RegExp('(?:^| )' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?: |$)');
+  return re.test(text);
+}
 
 function normSimple(s){
   return String(s||'').trim().toLowerCase();
@@ -852,7 +873,7 @@ function processXML(xmlText, opts = null) {
       displayId,
       origText: text,
       // normalized search index (title + id + lyrics) so search works on text too
-      searchHaystack: normText((displayId||'') + ' ' + (s.getElementsByTagName('title')[0]?.textContent.trim()||'') + ' ' + plainForSearch)
+      searchHaystack: normSearch((displayId||'') + ' ' + (s.getElementsByTagName('title')[0]?.textContent.trim()||'') + ' ' + plainForSearch)
     };
   });
 
@@ -933,7 +954,8 @@ function renderAllSongsPreserveScroll(){
 function filterSongs() {
   const el = document.getElementById('search');
   const qRaw = el ? String(el.value || '') : '';
-  const q = normText(qRaw).trim();
+  const qTokens = splitSearchTokens(qRaw);
+  const q = qTokens.join(' ');
 
   // Počas vyhľadávania drž sekciu "Zoznam piesní" otvorenú, ale nikdy netoggle-uj (to spôsobovalo skákanie).
   try{
@@ -952,7 +974,14 @@ function filterSongs() {
   if (!q) {
     filteredSongs = [...songs];
   } else {
-    filteredSongs = songs.filter(s => s.searchHaystack.includes(q));
+    filteredSongs = songs.filter(s => {
+      const hay = String(s.searchHaystack || '');
+      // order-insensitive: all query tokens must be present somewhere
+      for (const tok of qTokens){
+        if (!_containsSearchToken(hay, tok)) return false;
+      }
+      return true;
+    });
   }
 
   renderAllSongsPreserveScroll();
@@ -3131,7 +3160,17 @@ async function loadPlaylistsFromDrive() {
     return;
   }
 
-  list = (list || []).filter(p => p.name !== "PiesneNaDnes" && p.name !== "PlaylistOrder" && p.name !== "HistoryLog" && p.name !== "LiturgiaOverrides.json");
+  list = (list || []).filter(p => {
+    const n = String(p && p.name || '');
+    const low = n.toLowerCase();
+    if (low === "piesnenadnes") return false;
+    if (low === "playlistorder") return false;
+    if (low === "historylog") return false;
+    if (low === "liturgiaoverrides") return false;
+    if (low === "_liturgiaoverrides") return false;
+    if (low === "liturgiaoverrides.json") return false;
+    return true;
+  });
   const names = list.map(p => p.name);
 
   // Vyčisti lokálny cache o playlisty, ktoré už na Drive nie sú
@@ -3681,17 +3720,23 @@ async function hardResetApp() {
     return;
   }
 
-  localStorage.clear();
-  try {
+  try{ localStorage.clear(); }catch(e){}
+  try{
     const keys = await caches.keys();
     for (const k of keys) await caches.delete(k);
   } catch (e) {}
 
   setSyncStatus("Aktualizované", "sync-ok");
-  showToast("Aktualizované", true, 1800);
+  showToast("Aktualizované", true, 1600);
 
-  // tvrdý reload
-  try { location.reload(true); } catch(e) { location.reload(); }
+  // tvrdý reload s cache-busting URL (spoľahlivejšie než location.reload(true))
+  try{
+    const base = location.href.split('#')[0].split('?')[0];
+    const hash = location.hash || '';
+    location.replace(base + '?v=93&ts=' + Date.now() + hash);
+  }catch(e){
+    try{ location.reload(); }catch(e2){}
+  }
 }
 
 /* Formspree */
@@ -3933,7 +3978,8 @@ const LIT_MASS_CHOICE_PREFIX = 'liturgia_mass_choice_'; // liturgia_mass_choice_
 
 // Admin override (999 Aleluja): prepísanie žalmu / refrénu / aklamácie pred evanjeliom.
 // Ukladá sa do Drive (folder "Playlisty") ako jeden JSON súbor, aby to videli všetci.
-const LIT_OVERRIDES_FILE = 'LiturgiaOverrides';
+const LIT_OVERRIDES_FILE = '_LiturgiaOverrides';
+const LIT_OVERRIDES_FILE_FALLBACK = 'LiturgiaOverrides';
 const LIT_OVERRIDES_CACHE_KEY = 'liturgia_overrides_cache_v1';
 let __litOverrides = null; // {overrides:{key:{psalmRefrain,psalmText,verse}}}
 
@@ -4000,7 +4046,10 @@ function _litParseOverridesText(rawText){
 async function _fetchLitOverridesFromDrive(){
   try{
     if (!SCRIPT_URL) return null;
-    const res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}`);
+    let res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}`);
+    if (!res || !res.ok){
+      res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(LIT_OVERRIDES_FILE_FALLBACK)}`);
+    }
     if (!res || !res.ok) return null;
     const text = (res.text != null) ? String(res.text) : '';
     if (!text || !text.trim()) return { version: 1, overrides: {} };
@@ -5173,7 +5222,12 @@ if (expectBriefAfterIntro){
 
 // Reading/Gospel intro line: next non-empty line is the brief sentence
 const tLine = line.trim();
-if (!inPsalm && (/^Čítanie\s+z\s+/i.test(tLine) || /^Čítanie\s+zo\s+/i.test(tLine))){
+const tLineNorm = tLine
+  .replace(/^[\s>*\-_•]+/g,'')
+  .replace(/^[*_]+/g,'')
+  .replace(/[*_]+$/g,'')
+  .trim();
+if (!inPsalm && (/^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.test(tLineNorm))){
   html += '<div class="kbs-line">'+esc(tLine)+'</div>';
   expectBriefAfterIntro = true;
   continue;

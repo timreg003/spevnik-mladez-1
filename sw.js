@@ -1,5 +1,5 @@
 // Service Worker – robust offline (app shell + cache-first) + non-blocking external assets
-const CACHE_NAME = 'spevnik-v92';
+const CACHE_NAME = 'spevnik-v93';
 
 const CORE_ASSETS = [
   './',
@@ -63,7 +63,7 @@ try {
 
       try {
         const fresh = await fetch(req);
-        if (fresh && fresh.ok) cache.put(req, fresh.clone());
+        if (fresh && fresh.ok && fresh.status !== 206 && !req.headers.has('range')) cache.put(req, fresh.clone());
         return fresh;
       } catch (e) {
         return new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
@@ -77,7 +77,7 @@ try {
     caches.match(req, { ignoreSearch: true }).then(cached => cached || fetch(req).then(resp => {
       try {
         const url = new URL(req.url);
-        if (req.method === 'GET' && url.origin === self.location.origin && resp && resp.ok && resp.status !== 206) {
+        if (req.method === 'GET' && url.origin === self.location.origin && resp && resp.ok && resp.status !== 206 && !req.headers.has('range')) {
           const copy = resp.clone();
           caches.open(CACHE_NAME).then(cache => { try { cache.put(req, copy); } catch(e) {} });
         }
