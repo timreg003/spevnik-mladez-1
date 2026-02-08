@@ -115,7 +115,7 @@ function startMetaPolling(){
   metaPollingStarted = true;
   // okamžite po štarte + každú minútu
   checkMetaAndToggleBadge();
-  setInterval(checkMetaAndToggleBadge, 60 * 1000);
+  setInterval(checkMetaAndToggleBadge, POLL_INTERVAL_MS);
   window.addEventListener('online', () => checkMetaAndToggleBadge());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkMetaAndToggleBadge(); });
 }
@@ -149,6 +149,7 @@ async function runUpdateNow(fromAuto=false){
   // najstabilnejšie: tvrdý reload UI
   try{ renderAllSongs(); }catch(e){}
   try{ renderDnesUI(); }catch(e){}
+  try{ refreshOpenDnesSongOrderIfNeeded(); }catch(e){}
   try{ renderPlaylistsUI(true); }catch(e){}
   try{ loadHistoryCacheFirst(true); }catch(e){}
 
@@ -157,8 +158,11 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v87';
-const APP_CACHE_NAME = 'spevnik-v87';
+const APP_BUILD = 'v90';
+const APP_CACHE_NAME = 'spevnik-v90';
+
+// Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
+const POLL_INTERVAL_MS = 30 * 1000;
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -246,7 +250,7 @@ function startLitOverridesPolling(){
   if (litOvPollingStarted) return;
   litOvPollingStarted = true;
   pollLitOverridesAndAutoApply();
-  setInterval(pollLitOverridesAndAutoApply, 60 * 1000);
+  setInterval(pollLitOverridesAndAutoApply, POLL_INTERVAL_MS);
   window.addEventListener('online', () => pollLitOverridesAndAutoApply());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollLitOverridesAndAutoApply(); });
 }
@@ -2417,9 +2421,30 @@ async function loadDnesFromDrive() {
     const t = (data && data.text != null) ? String(data.text) : "";
     localStorage.setItem('piesne_dnes', t.trim());
   } catch(e) {}
+  // ak je otvorená pieseň z 'Piesne na dnes', preber aj nový 'order'
+  refreshOpenDnesSongOrderIfNeeded();
   dnesFetchInFlight = false;
   loadDnesCacheFirst(true);
   if (isAdmin) openDnesEditor(true);
+
+
+function refreshOpenDnesSongOrderIfNeeded(){
+  // Keď admin zmení poradie (forma) piesne v "Piesne na dnes", iné zariadenia si to dotiahnu automaticky.
+  // Ak má používateľ danú pieseň už otvorenú, musí sa to prejaviť hneď (bez zatvorenia a otvorenia).
+  try{
+    if (currentListSource !== 'dnes') return;
+    if (!currentSong) return;
+    const id = String(currentSong.id || '');
+    const payload = parseDnesPayload(localStorage.getItem('piesne_dnes') || '');
+    const it = (payload.items||[]).find(x => String(x.songId) === id);
+    const newOrder = it ? String(it.order||'') : '';
+    if (newOrder !== String(currentDnesOrder||'')){
+      currentDnesOrder = newOrder;
+      try{ renderSong(); }catch(e){}
+    }
+  }catch(e){}
+}
+
 }
 
 /* dnes editor (zachované) */
@@ -3808,6 +3833,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateFontSizeLabel();
   initSongPinchToZoom();
   updateChordTemplateUI();
+  // 📱 Keep display awake while app is open (best-effort; activates after first user tap)
+  try{ initKeepScreenAwake(); }catch(e){}
 // Try to request persistent storage (helps iOS/Android keep offline cache longer)
 try {
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
@@ -4099,12 +4126,19 @@ function _litStripAdditionalCelebrationsText(txt){
 // Plný text začína až prvým skutočným "Čítanie z/zo..." alebo "Začiatok..." blokom.
 function _litDropOverviewKbs(txt){
   const s = String(txt || '');
-  // nájdi prvý výskyt plného textu (nie súradnice)
-  const re = /(^|\n)\s*(Čítanie\s+(z|zo)\b|Začiatok\b)/i;
-  const m = s.match(re);
+  // KBS "offline" text začína po prehľade typicky riadkom "#### Prvé čítanie".
+  // Ak zarežeme až na "Čítanie z...", stratí sa krátka sivá veta pod nadpisom.
+  // Preto najprv skús nájsť prvý nadpis ####/##### a až keď sa nenájde, zober prvé "Čítanie z...".
+  let m = s.match(/(^|\n)\s*#{4,5}\s+/m);
   if (m && m.index != null){
     let start = m.index;
-    // ak match začína znakom nového riadku, preskoč ho
+    if (start < s.length && s[start] === '\n') start += 1;
+    return s.slice(start).trim();
+  }
+  // fallback: prvý výskyt plného textu (nie súradnice)
+  m = s.match(/(^|\n)\s*(Čítanie\s+(z|zo)\b|Začiatok\b)/i);
+  if (m && m.index != null){
+    let start = m.index;
     if (start < s.length && s[start] === '\n') start += 1;
     return s.slice(start).trim();
   }
@@ -4984,6 +5018,50 @@ function _litPickMainVariantForCalendar(variants){
   return idx >= 0 ? idx : 0;
 }
 
+// Pre Aleluja 999 nechceme ponúkať "fakultatívne/alternatívy" a najmä nech nechytíme položku "alebo".
+// Zároveň vyber taký variant, ktorý má najviac dát (žalm/verš/2.čítanie), aby sa nestalo, že sa nič nevloží.
+function _litBestVariantIndexNoOr(variants){
+  const arr = Array.isArray(variants) ? variants : [];
+  if (!arr.length) return 0;
+
+  function isOr(v){
+    const lab = String((v && v.label) || '').trim().toLowerCase();
+    return lab === 'alebo' || lab.startsWith('alebo ');
+  }
+  function score(v){
+    if (!v) return 0;
+    let s = 0;
+    const ps = String(v.psalmText || '').trim();
+    const pr = String(v.psalmRefrain || '').trim();
+    const av = String(v.alleluiaVerse || '').trim();
+    const t = String(v.text || '').trim();
+    if (ps) s += 5;
+    if (pr) s += 2;
+    if (av) s += 4;
+    // plný text pomáha pri parsovaní, ale nech nie je jediný zdroj
+    if (t && t.length > 3000) s += 1;
+    return s;
+  }
+
+  // 1) preferuj Fériu, ak nie je "alebo"
+  let idx = arr.findIndex(v => v && !isOr(v) && typeof v.label === 'string' && /f[ée]ria/i.test(v.label));
+  if (idx >= 0) return idx;
+
+  // 2) vyber najlepší ne-"alebo" podľa skóre
+  let best = 0;
+  let bestScore = -1;
+  for (let i=0;i<arr.length;i++){
+    if (isOr(arr[i])) continue;
+    const sc = score(arr[i]);
+    if (sc > bestScore){ bestScore = sc; best = i; }
+  }
+  if (bestScore > 0) return best;
+
+  // 3) fallback: prvý ne-"alebo"
+  idx = arr.findIndex(v => v && !isOr(v));
+  return idx >= 0 ? idx : 0;
+}
+
 function _litKbsLikeHtmlFromText(rawText){
   const s = String(rawText||'').replace(/\r/g,'');
   const lines = s.split('\n');
@@ -5006,8 +5084,14 @@ function _litKbsLikeHtmlFromText(rawText){
 
     // headings
     if (/^#{5}\s+/.test(line)){
+      const h5 = line.replace(/^#{5}\s+/, '').trim();
+      const isGospelH5 = /^Evanjelium\b/i.test(h5) || /Čítanie\s+zo\s+svätého\s+Evanjelia/i.test(h5);
+      if (isGospelH5 && afterVerse){
+        // medzi veršom/aklamáciou a evanjeliom nech sú dva prázdne riadky (aj keď Evanjelium je #####)
+        html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
+      }
       inPsalm = false;
-      html += '<div class="kbs-h5">'+esc(line.replace(/^#{5}\s+/,''))+'</div>';
+      html += '<div class="kbs-h5">'+esc(h5)+'</div>';
       continue;
     }
     if (/^#{4}\s+/.test(line)){
@@ -5029,11 +5113,12 @@ function _litKbsLikeHtmlFromText(rawText){
     }
 
 
-    // krátka veta pod nadpisom (sivé, menšie, kurzíva)
-    // typicky je to 1 riadok medzi nadpisom (####) a "Čítanie z ..."
+        // krátka veta pod nadpisom (sivé, menšie, kurzíva)
+    // typicky je to 1 riadok po súradniciach (Iz 58,6-9 / Mt 5,13-16) a pred "Čítanie z ..."
     {
-      const t = String(line||'').trim();
-      if (!inPsalm && t && !/^#/.test(t) && !/^Čítanie\b/i.test(t) && !/^Počuli\s+sme\b/i.test(t)){
+      const tRaw = String(line||'').trim();
+      const t = tRaw.replace(/^\*+|\*+$/g,'').replace(/^_+|_+$/g,'').trim();
+      if (!inPsalm && t && !/^#/.test(tRaw) && !/^Čítanie\b/i.test(t) && !/^Počuli\s+sme\b/i.test(t) && !/^R\s*\.?\s*:/i.test(t)){
         // nájdi ďalší ne-prázdny riadok
         let j = i+1;
         let next = '';
@@ -5042,11 +5127,18 @@ function _litKbsLikeHtmlFromText(rawText){
           if (nx){ next = nx; break; }
           j++;
         }
-        if (next && /^Čítanie\b/i.test(next) && (lastH4 || /^#{4}\s+/.test(String(lines[i-1]||'')))){
+        // Ak nasleduje "Čítanie ..." a sme v sekcii (####), je to tá krátka veta.
+        if (next && /^Čítanie\b/i.test(next.trim()) && lastH4 && !/žalm/i.test(lastH4)){
           html += '<div class="kbs-brief">'+esc(t)+'</div>';
           continue;
         }
       }
+    }
+
+    // Ak "Evanjelium" príde ako bežný riadok (nie nadpis), vlož medzeru po aleluja/verši
+    if (afterVerse && (/^Evanjelium\b/i.test(line.trim()) || /Čítanie\s+zo\s+svätého\s+Evanjelia/i.test(line.trim()))){
+      html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
+      afterVerse = false;
     }
 
     // Ak "Čítanie zo svätého Evanjelia" príde ako bežný riadok (nie nadpis), vlož medzeru po aleluja/verši
@@ -5304,6 +5396,102 @@ let __litInited = false;
   };
 })();
 
+/* ----- Keep screen awake (Android/iOS best-effort) ----- */
+let __globalWakeLock = null;
+let __keepAwakeVideo = null;
+let __keepAwakeActivated = false;
+
+async function _requestWakeLock(){
+  try{
+    if (document.visibilityState !== 'visible') return;
+    if (navigator.wakeLock && navigator.wakeLock.request){
+      try{ if (__globalWakeLock) return; }catch(e){}
+      __globalWakeLock = await navigator.wakeLock.request('screen');
+      try{
+        __globalWakeLock.addEventListener('release', () => { __globalWakeLock = null; });
+      }catch(e){}
+      return;
+    }
+  }catch(e){}
+}
+
+function _releaseWakeLock(){
+  try{ if (__globalWakeLock && __globalWakeLock.release) __globalWakeLock.release(); }catch(e){}
+  __globalWakeLock = null;
+}
+
+function _ensureKeepAwakeVideo(){
+  try{
+    if (__keepAwakeVideo) return __keepAwakeVideo;
+    const v = document.createElement('video');
+    v.setAttribute('playsinline','');
+    v.setAttribute('webkit-playsinline','');
+    v.muted = true;
+    v.loop = true;
+    v.preload = 'auto';
+    v.src = 'keepawake.mp4';
+    // iOS občas odmietne play() ak je video úplne display:none; nech je 1px a takmer transparentné
+    v.style.position = 'fixed';
+    v.style.left = '0';
+    v.style.top = '0';
+    v.style.width = '1px';
+    v.style.height = '1px';
+    v.style.opacity = '0.01';
+    v.style.pointerEvents = 'none';
+    v.style.zIndex = '-1';
+    document.body.appendChild(v);
+    __keepAwakeVideo = v;
+    return v;
+  }catch(e){ return null; }
+}
+
+async function _startKeepAwakeFallback(){
+  // Fallback hlavne pre iOS Safari: skúsi prehrávať lokálne (offline) tiché video v loop-e.
+  try{
+    const v = _ensureKeepAwakeVideo();
+    if (!v) return;
+    // play() môže zlyhať bez user gesture – preto to voláme až po prvom tap/click.
+    await v.play();
+  }catch(e){}
+}
+
+function initKeepScreenAwake(){
+  if (__keepAwakeActivated) return;
+  __keepAwakeActivated = true;
+
+  async function activate(){
+    // 1) moderný Wake Lock (Android Chrome, niektoré PWA)
+    await _requestWakeLock();
+    // 2) iOS fallback (video)
+    await _startKeepAwakeFallback();
+  }
+
+  // Aktivuj až po prvom user geste (požiadavka prehliadačov)
+  const once = (ev) => {
+    try{
+      document.removeEventListener('click', once, true);
+      document.removeEventListener('touchstart', once, true);
+      document.removeEventListener('pointerdown', once, true);
+    }catch(e){}
+    activate();
+  };
+  document.addEventListener('click', once, true);
+  document.addEventListener('touchstart', once, true);
+  document.addEventListener('pointerdown', once, true);
+
+  // Keď sa appka vráti do popredia, skús znovu získať wake lock
+  document.addEventListener('visibilitychange', () => {
+    try{
+      if (document.visibilityState === 'visible'){
+        // reacquire
+        activate();
+      } else {
+        _releaseWakeLock();
+      }
+    }catch(e){}
+  });
+}
+
 /* ----- Aleluja 999 vloženie blokov ----- */
 function cleanPsalmText(ps){
   // Vstup: text žalmu z KBS (môže obsahovať nadpisy, smernice, R.: aj zvyšky ďalších častí).
@@ -5373,7 +5561,7 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   }
 
   const variants = cached.variants;
-  const vidx = Math.min(getLitChoiceIndex(iso), variants.length-1);
+  const vidx = _litBestVariantIndexNoOr(variants);
   const v = variants[vidx] || variants[0];
 
   // Z liturgie odstráň voliteľné "Ďalšie slávenia" (najmä v pôste),
