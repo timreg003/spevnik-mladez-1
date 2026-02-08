@@ -157,8 +157,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v84';
-const APP_CACHE_NAME = 'spevnik-v84';
+const APP_BUILD = 'v85';
+const APP_CACHE_NAME = 'spevnik-v85';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -4077,6 +4077,24 @@ function _litStripAdditionalCelebrationsText(txt){
 }
 
 
+
+
+// Odstráni úvodný "prehľad" (súradnice/☑/✓ a R.:), ktorý KBS zobrazuje pred plným textom.
+// Plný text začína až prvým skutočným "Čítanie z/zo..." alebo "Začiatok..." blokom.
+function _litDropOverviewKbs(txt){
+  const s = String(txt || '');
+  // nájdi prvý výskyt plného textu (nie súradnice)
+  const re = /(^|\n)\s*(Čítanie\s+(z|zo)\b|Začiatok\b)/i;
+  const m = s.match(re);
+  if (m && m.index != null){
+    let start = m.index;
+    // ak match začína znakom nového riadku, preskoč ho
+    if (start < s.length && s[start] === '\n') start += 1;
+    return s.slice(start).trim();
+  }
+  return s.trim();
+}
+
 // Pre pieseň 999 potrebujeme "plnú" liturgiu (nie len prehľad so súradnicami).
 // Krátky text typicky nemá samostatné hlavičky Žalm/Aklamácia/Evanjelium, preto z neho nevytiahneme žalmový text ani verš.
 function _litIsFullEnoughFor999Chants(txt){
@@ -5265,7 +5283,8 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
 
   // Dôležité: pre pieseň 999 chceme parsovať CELÝ text hlavnej omše,
   // nie prehľadové "smernice" (tie by dali iba refrén bez textu).
-  const fullText = _litStripAdditionalCelebrationsText((v && v.text) ? String(v.text) : '');
+  const fullTextRaw = _litStripAdditionalCelebrationsText((v && v.text) ? String(v.text) : '');
+  const fullText = _litDropOverviewKbs(fullTextRaw);
 
   // Ak máme v cache len "krátku" liturgiu (prehľad so súradnicami), nedá sa z nej vytiahnuť text žalmu ani verš.
   // V takom prípade (ak sme online) si vynútime doťah zo siete a po uložení do cache sa otvorená pieseň 999 sama prekreslí.
