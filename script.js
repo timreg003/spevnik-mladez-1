@@ -148,7 +148,7 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v74';
+const APP_BUILD = 'v75';
 const APP_CACHE_NAME = 'spevnik-v69';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
@@ -4188,7 +4188,7 @@ function _litIsStartOfContent(line){
   );
 }
 
-// --- v74: Prefer full-text first reading over short "overview" blocks ---
+// --- v75: Prefer full-text first reading over short "overview" blocks ---
 function _litTrim(s){ return String(s || '').trim(); }
 
 function _litIsSectionHeading(line){
@@ -4440,71 +4440,90 @@ function _litSplitIntoSections(text){
 
   lines = _litDropLeadNoise(lines);
 
-  // v74: KBS má hore často prehľad (súradnice + alelujový verš) a až nižšie plný text.
-  // Aby sa "PRVÉ ČÍTANIE" nikdy neodrezalo na nadpise+súradnici, vyrežeme 1. čítanie podľa
-  // zakončenia "Počuli sme ..." (ak existuje) – nie podľa toho, kde sa prvýkrát objaví Žalm.
-  // Tým pádom sa do 1. čítania vždy dostane aj celý text (ako na KBS).
+  // v75: KBS má hore "prehľad" (súradnice + refrén + alelujový verš) a až nižšie plný text čítania.
+  // Problém, ktorý si posielal na screenshotoch, vzniká tak, že čítanie sa ukončí príliš skoro (len nadpis+súradnica)
+  // alebo sa naopak natiahne až po evanjelium, keď sa nenájde správne "Počuli sme ..." v 1. čítaní.
+  // Riešenie: 1. čítanie berieme iba vtedy, keď sa po nadpise objaví aj "telo" (dlhší text),
+  // a koniec hľadáme ako prvé "Počuli sme" po tom, čo už telo máme. Ak "Počuli" chýba, ukončíme ho na ďalšom nadpise sekcie.
   let r1EndAbs = -1;
-  try{
-    // nájdi prvý začiatok čítania (nie evanjelium)
-    let r1StartAbs = -1;
-    for (let i=0;i<lines.length;i++){
-      const t = String(lines[i]||'').trim();
-      if (!t) continue;
-      if (_litIsGospelHeading(t)) continue;
-      if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) { r1StartAbs = i; break; }
-    }
-    if (r1StartAbs >= 0){
-      // nájdi prvé "Počuli sme ..." po začiatku (v rámci primeraného okna)
-      const lim = Math.min(lines.length, r1StartAbs + 260);
-      for (let j=r1StartAbs+1; j<lim; j++){
-        const tj = String(lines[j]||'').trim();
+  let r1StartAbs = 0;
+  try {
+    const MAX_SCAN = 600; // bezpečný limit
+    let start = -1;
+    let i = 0;
+    while (i < lines.length) {
+      // nájdi kandidáta začiatku čítania (nie evanjelium)
+      start = -1;
+      for (; i < lines.length; i++) {
+        const t = String(lines[i] || '').trim();
+        if (!t) continue;
+        if (_litIsGospelHeading(t)) continue;
+        if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) { start = i; break; }
+      }
+      if (start < 0) break;
+
+      // Skontroluj, či ide o "plný" blok: v najbližších riadkoch musí byť aspoň jeden riadok tela (nie len súradnice / ďalší nadpis)
+      let bodySeen = false;
+      const lookLim = Math.min(lines.length, start + 18);
+      for (let k = start + 1; k < lookLim; k++) {
+        const t = String(lines[k] || '').trim();
+        if (!t) continue;
+        if (_litIsSectionHeading(t)) break; // hneď ďalší nadpis => prehľad
+        if (_litLooksLikeSmernica(t)) continue;
+        if (_litLooksLikeReadingCoords(t)) continue;
+        if (/^R\s*\.?\s*:/i.test(t)) continue;
+        // "telo" = dlhší text (alebo podnadpis) – nie iba 1 slovo
+        if (t.length >= 28) { bodySeen = true; break; }
+      }
+
+      if (!bodySeen) {
+        // toto bol len prehľadový blok – pokračuj na ďalší výskyt čítania nižšie
+        i = start + 1;
+        continue;
+      }
+
+      // Nájdi koniec čítania: prvé "Počuli sme" po tom, čo už sme v tele. Regex nie je ukotvený, lebo KBS občas pridá neviditeľné znaky.
+      r1EndAbs = -1;
+      const lim = Math.min(lines.length, start + MAX_SCAN);
+      let hadBody = false;
+      for (let j = start + 1; j < lim; j++) {
+        const tj0 = String(lines[j] || '');
+        const tj = tj0.trim();
         if (!tj) continue;
-        if (/^Počuli\s+sme\b/i.test(tj)) { r1EndAbs = j+1; break; }
-      }
-      // ak sa nenašlo "Počuli sme", nech je aspoň blok po prvý výskyt žalmu/sekcie
-      if (r1EndAbs < 0){
-        for (let j=r1StartAbs+1; j<lim; j++){
-          const tj = String(lines[j]||'').trim();
-          if (!tj) continue;
-          if (_litIsSectionHeading(tj) && !_litIsReadingHeading(tj)) { r1EndAbs = j; break; }
+
+        // body sa považuje za "videné" na prvom dlhšom ne-nadpise
+        if (!hadBody && !_litIsSectionHeading(tj) && !_litLooksLikeSmernica(tj) && !_litLooksLikeReadingCoords(tj) && tj.length >= 28) {
+          hadBody = true;
         }
+
+        if (hadBody && /Počuli\s+sme/i.test(tj)) { r1EndAbs = j + 1; break; }
+
+        // fallback: ak "Počuli" chýba, ukončíme na ďalšom nadpise sekcie (žalm/aleluja/evanjelium...), ale až po tom, čo sme videli telo
+        if (hadBody && _litIsSectionHeading(tj) && !_litIsReadingHeading(tj)) { r1EndAbs = j; break; }
       }
-      // ak čítanie vyšlo extrémne krátke (len 1-2 riadky), skús nájsť ďalší výskyt "Čítanie" nižšie
-      if (r1EndAbs > 0){
-        const block = lines.slice(r1StartAbs, r1EndAbs);
-        if (!_litBlockHasRealBody(block)){
-          // pokračuj nižšie – plný text býva až pod prehľadom
-          for (let i=r1StartAbs+1;i<lines.length;i++){
-            const t = String(lines[i]||'').trim();
-            if (!t) continue;
-            if (_litIsGospelHeading(t)) continue;
-            if (/^(Čítanie|Začiatok|Koniec)\b/i.test(t)) {
-              // zopakuj hľadanie konca
-              const lim2 = Math.min(lines.length, i + 260);
-              let end2 = -1;
-              for (let j=i+1;j<lim2;j++){
-                const tj = String(lines[j]||'').trim();
-                if (!tj) continue;
-                if (/^Počuli\s+sme\b/i.test(tj)) { end2 = j+1; break; }
-              }
-              if (end2 > 0){
-                const b2 = lines.slice(i, end2);
-                if (_litBlockHasRealBody(b2)) { lines = lines.slice(i); r1EndAbs = end2 - i; }
-              }
-              break;
-            }
-          }
+
+      // ak sme našli rozumný koniec, hotovo
+      if (r1EndAbs > 0 && r1EndAbs > start + 2) {
+        // odhoď všetko pred začiatkom 1. čítania (typicky prehľad/súradnice)
+        if (start > 0) {
+          lines = lines.slice(start);
+          r1EndAbs = r1EndAbs - start;
         }
+        r1StartAbs = 0;
+        break;
       }
+
+      // inak skúšaj ďalší kandidát
+      i = start + 1;
+      r1EndAbs = -1;
     }
-  }catch(e){}
+  } catch (e) {}
 
   // Ak sme našli koniec 1. čítania, rozdeľ tail až po ňom (indexy ďalších sekcií budú voči tail)
   let headReading1 = null;
   let tail = lines;
   if (r1EndAbs > 0){
-    headReading1 = lines.slice(0, r1EndAbs);
+    headReading1 = lines.slice(r1StartAbs, r1EndAbs);
     tail = lines.slice(r1EndAbs);
   }
 
