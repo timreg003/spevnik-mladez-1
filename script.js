@@ -157,8 +157,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v82';
-const APP_CACHE_NAME = 'spevnik-v82';
+const APP_BUILD = 'v83';
+const APP_CACHE_NAME = 'spevnik-v83';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -2154,14 +2154,38 @@ function renderSong() {
 }
 
 function transposeChord(c, step) {
-  return c.replace(/[A-H][#b]?/g, (n) => {
-    const idx = scale.indexOf(n);
-    if (idx === -1) return n;
+  // Robust transposition:
+  // - Supports sharps and flats (C#, Db, Bb...)
+  // - Keeps Slovak/German note naming: B (Bb) and H
+  const map = {
+    "C":0, "C#":1, "DB":1,
+    "D":2, "D#":3, "EB":3,
+    "E":4,
+    "F":5, "F#":6, "GB":6,
+    "G":7, "G#":8, "AB":8,
+    "A":9, "A#":10, "BB":10,
+    "B":10, // in this app: B = Bb
+    "H":11
+  };
+  const outSharp = ["C","C#","D","D#","E","F","F#","G","G#","A","B","H"];
+  const outFlat  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","B","H"];
+
+  // replace every root note occurrence (A-H with optional #/b)
+  return String(c||"").replace(/([A-Ha-h])([#b]?)/g, (m0, ltr, acc) => {
+    const key = (String(ltr).toUpperCase() + String(acc||"")).replace(/b/i,"b");
+    const normKey = key.toUpperCase(); // DB, EB, ...
+    const idx = map[normKey];
+    if (idx == null) return m0;
+
     let newIdx = (idx + step) % 12;
     while (newIdx < 0) newIdx += 12;
-    return scale[newIdx];
+
+    const useFlat = (String(acc||"").toLowerCase() === "b") && String(ltr).toUpperCase() !== "B";
+    const out = (useFlat ? outFlat : outSharp)[newIdx];
+    return out;
   });
 }
+
 function transposeSong(d) { transposeStep += d; document.getElementById('transpose-val').innerText = (transposeStep>0?"+":"")+transposeStep; renderSong(); }
 function resetTranspose() { transposeStep = 0; document.getElementById('transpose-val').innerText = "0"; renderSong(); }
 function toggleChords() { chordsVisible = !chordsVisible; renderSong(); }
@@ -5220,15 +5244,12 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   const vidx = Math.min(getLitChoiceIndex(iso), variants.length-1);
   const v = variants[vidx] || variants[0];
 
-  const masses = _litSplitIntoMasses(_litStripAdditionalCelebrationsText((v && v.text) ? String(v.text) : ''));
   const midx = 0; // vždy hlavná omša dňa (bez fakultatívnych)
 
-  const ov = (function(){
-    try { return getLitOverride(iso, vidx, midx) || {}; } catch(e){ return {}; }
-  })();
-  const mass = masses[midx] || masses[0] || { title:'', text: (v && v.text) ? String(v.text) : '' };
-
-  const parsed = _litSplitIntoSections(String(mass.text||''));
+  // Dôležité: pre pieseň 999 chceme parsovať CELÝ text hlavnej omše,
+  // nie prehľadové "smernice" (tie by dali iba refrén bez textu).
+  const fullText = _litStripAdditionalCelebrationsText((v && v.text) ? String(v.text) : '');
+  const parsed = _litSplitIntoSections(fullText);
 
   // Aklamácia pred evanjeliom (nie vždy "Alelujový verš")
   // Dôležité: label NESMIE obsahovať celý verš (inak sa duplikuje modrý riadok + biely text).
@@ -5363,9 +5384,11 @@ function setupAlelujaLitControlsIfNeeded(){
   // vyber konkrétnu omšu (mass) a rozsekej na sekcie
   const variants = Array.isArray(cached.variants) && cached.variants.length ? cached.variants : [{ label:'', title:'', text: (cached.text||'') }];
   const v = variants[Math.min(vidx, variants.length-1)] || variants[0];
-  const masses = _litSplitIntoMasses(_litStripAdditionalCelebrationsText(String(v.text || cached.text || '')));
-  const m = masses[Math.min(midx, masses.length-1)] || masses[0] || { text:'' };
-  const parsed = _litSplitIntoSections(String(m.text||''));
+  // Pre úpravy (pieseň 999) používame celý text hlavnej omše,
+  // nie prehľadové smernice – inak by defaulty vyšli prázdne.
+  const fullText = _litStripAdditionalCelebrationsText(String(v.text || cached.text || ''));
+  const m = { title: 'hlavná omša', text: fullText };
+  const parsed = _litSplitIntoSections(fullText);
   // bez výberu omše (fakultatívne sa v piesni 999 nezobrazujú)
   const massSelectHTML = '';
 
