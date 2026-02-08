@@ -33,6 +33,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDF
 const LS_META_SEEN = 'spevnik_meta_seen_v1';
 let lastRemoteMeta = null;
 let metaPollingStarted = false;
+let autoUpdateInFlight = false;
 
 function getSeenMeta(){
   try { return JSON.parse(localStorage.getItem(LS_META_SEEN) || 'null'); } catch(e) { return null; }
@@ -51,9 +52,10 @@ function metaIsNewer(remote, seen){
   return (rE > sE) || (rD > sD) || (rO > sO);
 }
 function setUpdateBadgeVisible(on){
+  // Update now runs automatically; keep the manual wheel hidden.
   const btn = document.getElementById('fab-newdata-btn');
   if (!btn) return;
-  btn.style.display = on ? 'inline-flex' : 'none';
+  btn.style.display = 'none';
 }
 
 async function fetchRemoteMeta(){
@@ -97,7 +99,12 @@ async function checkMetaAndToggleBadge(){
     }
 
     const hasUpdate = metaIsNewer(remote, seen);
-    setUpdateBadgeVisible(hasUpdate);
+    // Auto-update: when new data is available, update immediately (no manual wheel).
+    setUpdateBadgeVisible(false);
+    if (hasUpdate && !autoUpdateInFlight && !document.hidden){
+      autoUpdateInFlight = true;
+      try { await runUpdateNow(true); } catch(e) {} finally { autoUpdateInFlight = false; }
+    }
   } catch(e) {
     // ignore – keep previous badge state
   }
@@ -113,13 +120,13 @@ function startMetaPolling(){
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkMetaAndToggleBadge(); });
 }
 
-async function runUpdateNow(){
+async function runUpdateNow(fromAuto=false){
   if (!navigator.onLine){
     showToast("Si offline – aktualizácia nie je dostupná.", false);
     return;
   }
-  // zavri FAB menu (ak je otvorené)
-  try { closeFabMenu(); } catch(e) {}
+  // zavri FAB menu (ak je otvorené) – len ak to spúšťa používateľ
+  if (!fromAuto) { try { closeFabMenu(); } catch(e) {} }
   setUpdateBadgeVisible(false);
 
   setSyncStatus("Aktualizujem…", "sync-warn");
@@ -133,6 +140,8 @@ async function runUpdateNow(){
   try { await parseXML(); } catch(e) {}
   try { await Promise.allSettled([loadDnesFromDrive(), loadPlaylistsFromDrive(), loadHistoryFromDrive()]); } catch(e) {}
 
+  // po update si zober najnovšiu meta (ak sa medzitým niečo zmenilo)
+  try { lastRemoteMeta = await fetchRemoteMeta(); } catch(e) {}
   if (lastRemoteMeta) setSeenMeta(lastRemoteMeta);
 
   setSyncStatus("Aktualizované", "sync-ok");
@@ -148,8 +157,8 @@ async function runUpdateNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v80';
-const APP_CACHE_NAME = 'spevnik-v80';
+const APP_BUILD = 'v81';
+const APP_CACHE_NAME = 'spevnik-v81';
 
 // ===== LITURGIA OVERRIDES POLLING (without GAS meta support) =====
 // We poll LiturgiaOverrides.json via GAS action=litOverrideGet and auto-apply changes.
@@ -758,11 +767,9 @@ if (!saved || !saved.trim()){
           localStorage.setItem('spevnik_last_sync_at', String(now));
           localStorage.setItem('spevnik_last_sync_bytes', String(xmlText.length));
         } catch(e) {}
-        // Ak sme ešte nič nezobrazili, alebo nie sme v detaile, prepočítaj.
+        // Ak prišiel nový export, vždy ho spracuj.
         const inDetail = (document.getElementById('song-detail')?.style.display === 'block');
-        if (!saved || !inDetail) {
-          processXML(xmlText, { source:'network' });
-        }
+        processXML(xmlText, { source:'network' });
       }
     }
   } catch (e) {
@@ -833,6 +840,20 @@ function processXML(xmlText, opts = null) {
 
   filteredSongs = [...songs];
   renderAllSongs();
+
+  // refresh open song after data update (so changed chords/lyrics show immediately)
+  try{
+    const detail = document.getElementById('song-detail');
+    if (detail && detail.style.display === 'block' && currentSong){
+      const sc = document.getElementById('song-content');
+      const prevScroll = sc ? sc.scrollTop : 0;
+      const cid = String(currentSong.id||'');
+      const updated = songs.find(x => String(x.id) === cid);
+      if (updated) currentSong = updated;
+      renderSong();
+      if (sc) sc.scrollTop = prevScroll;
+    }
+  }catch(e){}
 
   // cache-first (no flicker)
   loadDnesCacheFirst(false);
@@ -1279,11 +1300,11 @@ function normalizeChordName(ch){
 
 function songLineHTML(label, text, extraClass) {
   const safeLabel = escapeHTML(label || '');
-  const rawText = String(text || '').replace(/\[(.*?)\]/g, (m, inner) => `[${normalizeChordName(inner)}]`);
+  const rawText = String(text || '').replace(CHORD_TOKEN_RE_G, (m, inner) => `[${normalizeChordName(inner)}]`);
   let safeText = escapeHTML(rawText);
 
   // chords -> span
-  safeText = safeText.replace(/\[(.*?)\]/g, '<span class="chord">$1</span>');
+  safeText = safeText.replace(CHORD_TOKEN_RE_G, '<span class="chord">$1</span>');
 
   const cls = extraClass ? `song-line ${extraClass}` : 'song-line';
   return `<div class="${cls}"><span class="song-label">${safeLabel}</span><span class="song-line-text">${safeText}</span></div>`;
@@ -1724,6 +1745,12 @@ function toggleDnesView(){
 
 
 const TEMPLATE_PREFIX = '\u2063'; // invisible separator for auto-inserted chordlines
+
+// Chords are in single brackets: [Am] ... (but liturgy blocks use double brackets [[...]]).
+// Always ignore [[...]] in chord parsing / transposition.
+const CHORD_TOKEN_RE = /\[(?!\[)([^\]\[]+?)\](?!\])/;
+const CHORD_TOKEN_RE_G = /\[(?!\[)([^\]\[]+?)\](?!\])/g;
+
 function stripTemplatePrefix(line){
   const t = String(line ?? '');
   return t.startsWith(TEMPLATE_PREFIX) ? t.slice(TEMPLATE_PREFIX.length) : t;
@@ -1734,7 +1761,7 @@ function isTemplateChordLine(line){
 
 function hasChordInLine(line){
   const t = stripTemplatePrefix(line);
-  return /\[[^\]]+\]/.test(String(t||''));
+  return CHORD_TOKEN_RE.test(String(t||''));
 }
 
 function stripChordsFromLine(line){
@@ -2043,7 +2070,7 @@ function renderSong() {
 
   // Transpose chords first
   if (transposeStep !== 0) {
-    text = text.replace(/\[(.*?)\]/g, (m, c) => `[${transposeChord(c, transposeStep)}]`);
+    text = text.replace(CHORD_TOKEN_RE_G, (m, c) => `[${transposeChord(c, transposeStep)}]`);
   }
 
   // Hide chords if needed
@@ -2079,7 +2106,7 @@ function renderSong() {
           keepChordsMode = false;
         } else if (!isChordOnlyLine(line)) {
           // normálny text: tento riadok spracuj bežne, potom režim ukonči
-          const out = String(line).replace(/\[.*?\]/g, '');
+          const out = String(line).replace(CHORD_TOKEN_RE_G, '');
           keepChordsMode = false;
           return out;
         }
@@ -2090,7 +2117,7 @@ function renderSong() {
       }
 
       // Bežné spracovanie: odstráň akordy
-      return String(line).replace(/\[.*?\]/g, '');
+      return String(line).replace(CHORD_TOKEN_RE_G, '');
     }).join('\n');
   }
 
@@ -2867,6 +2894,7 @@ function renderHistoryUI(showEmptyAllowed){
     const ts = Number(h.ts||0);
     const open = !!historyOpen[ts];
     const delBtn = isAdmin ? `<button class="history-del" onclick="event.stopPropagation(); deleteHistoryEntry(${ts})">X</button>` : '';
+    const editBtn = isAdmin ? `<button class="history-edit" onclick="event.stopPropagation(); renameHistoryEntry(${ts})">✎</button>` : '';
     const title = historyEntryTitle(h);
     const items = (h.items || []);
 
@@ -2891,7 +2919,7 @@ function renderHistoryUI(showEmptyAllowed){
       <div class="history-card">
         <div class="history-head" onclick="toggleHistoryEntry(${ts})">
           <div class="history-title">${escapeHtml(title)}</div>
-          ${delBtn}
+          ${editBtn}${delBtn}
         </div>
         ${lines}
       </div>`;
@@ -2964,6 +2992,27 @@ function deleteHistoryEntry(ts){
   try { fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
   loadHistoryFromDrive();
 }
+
+
+function renameHistoryEntry(ts){
+  if (!isAdmin) return;
+  const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
+  const idx = arr.findIndex(x => Number(x.ts) === Number(ts));
+  if (idx < 0) return;
+  const cur = arr[idx];
+  const oldTitle = String(cur.title || historyEntryTitle(cur) || '').trim();
+  const nextTitle = prompt('Nový názov playlistu v histórii:', oldTitle);
+  if (nextTitle == null) return; // cancelled
+  cur.title = String(nextTitle || '').trim();
+  // persist
+  localStorage.setItem(LS_HISTORY, JSON.stringify(arr));
+  renderHistoryUI(true);
+  // sync to Drive (best effort)
+  try {
+    fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${ADMIN_PWD}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+  } catch(e) {}
+}
+
 
 
 /* ===== PLAYLISTY (no flicker) ===== */
@@ -3730,7 +3779,36 @@ try {
 
 // PWA offline
 if ('serviceWorker' in navigator) {
-  try { navigator.serviceWorker.register('sw.js'); } catch(e) {}
+  try {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // Proactively check for a new SW (app shell update)
+      try { reg.update(); } catch(e) {}
+
+      reg.addEventListener('updatefound', () => {
+        // show "Aktualizujem…" while new SW is installing
+        setSyncStatus("Aktualizujem…", "sync-warn");
+        showToast("Aktualizujem...", true, 0);
+      });
+    }).catch(()=>{});
+  } catch(e) {}
+  // When the new SW takes control, reload to use the new files.
+  // Avoid a reload on first install (when there was no controller yet).
+  try{
+    let reloaded = false;
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      setSyncStatus("Aktualizované", "sync-ok");
+      showToast("Aktualizované", true, 1800);
+      if (!hadController){
+        // first install – just mark as ready
+        hadController = true;
+        return;
+      }
+      reloaded = true;
+      try { location.reload(); } catch(e) {}
+    });
+  }catch(e){}
 }
 
 // META update badge polling (1x/min) – start immediately (not only in song detail)
@@ -4388,10 +4466,44 @@ function _litSplitIntoSections(text){
   lines = _litDropLeadNoise(lines);
 
   const idxPsalm = (() => {
-    let i = _litFindIndex(lines, /^Responzóriový\s+žalm\b/i, 0);
-    if (i < 0) i = _litFindIndex(lines, /^Žalm\b/i, 0);
-    if (i < 0) i = _litFindIndex(lines, /^Ž\s*\d+\b/i, 0);
-    return i;
+    // Sometimes the page contains multiple psalms (e.g. optional/facultative readings).
+    // Prefer the first psalm section that has an actual body (not only coordinates).
+    const cand = [];
+    function collect(re){
+      for (let i=0;i<lines.length;i++){
+        if (re.test(_litKeyLine(lines[i]))) cand.push(i);
+      }
+    }
+    collect(/^Responzóriový\s+žalm\b/i);
+    collect(/^Žalm\b/i);
+    collect(/^Ž\s*\d+\b/i);
+
+    // unique + sort
+    const uniq = Array.from(new Set(cand)).sort((a,b)=>a-b);
+    if (!uniq.length) return -1;
+
+    function sectionHasBody(sec){
+      let long = 0;
+      for (const raw of sec){
+        const t = _litKeyLine(raw);
+        if (!t) continue;
+        if (/^R\s*\.?\s*:/i.test(t)) continue;
+        // coords-only line: short + looks like reference
+        if (t.length <= 55 && /\d/.test(t) && /^[0-3]?\s*[A-Za-zÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]{1,12}\s*\d+\s*,\s*\d+/.test(t)) continue;
+        if (t.length >= 18) long++;
+      }
+      return long >= 2;
+    }
+
+    for (const i of uniq){
+      const end = (() => {
+        const j = _litFindIndex(lines, /^(Alelujový\s+verš|Verš\s+pred\s+evanjeliom|Aklamácia\s+pred\s+evanjeliom|Sekvencia|Aleluja|Chvála\s+ti|Sláva\s+ti|Čítanie\b|Začiatok\b|Koniec\b|Evanjelium\b)\b/i, i+1);
+        return (j > -1) ? j : lines.length;
+      })();
+      const sec = lines.slice(i, end);
+      if (sectionHasBody(sec)) return i;
+    }
+    return uniq[0];
   })();
 
   const idxGospel = (() => {
@@ -5199,7 +5311,7 @@ function setupAlelujaLitControlsIfNeeded(){
   const titleIsAleluja = currentSong && String(currentSong.title||'').trim().toLowerCase() === 'aleluja';
   const isDnes = (currentListSource === 'dnes');
 
-  if (!is999 || !titleIsAleluja || !isDnes || !isAdmin){
+  if (!is999 || !titleIsAleluja || !isDnes){
     box.innerHTML = '';
     box.style.display = 'none';
     return;
@@ -5226,6 +5338,21 @@ function setupAlelujaLitControlsIfNeeded(){
   const masses = _litSplitIntoMasses(String(v.text || cached.text || ''));
   const m = masses[Math.min(midx, masses.length-1)] || masses[0] || { text:'' };
   const parsed = _litSplitIntoSections(String(m.text||''));
+
+  // výber omše (z dňa vs fakultatívne), viditeľné pre každého
+  const massesCount = masses.length || 0;
+  const canChooseMass = massesCount > 1;
+  const massSelectHTML = canChooseMass ? (
+    `<label class="lit-admin-label">Vybrať čítania</label>` +
+    `<select id="aleluja-lit-select" class="lit-admin-select">` +
+      masses.map((mm, i) => {
+        const t = String((mm && mm.title) || '').trim();
+        let lbl = t || (i === 0 ? 'Z dňa' : ('Fakultatívne ' + (i+1)));
+        if (!t && i === 1) lbl = 'Fakultatívne';
+        return `<option value="${i}" ${i===midx?'selected':''}>${escapeHtml(lbl)}</option>`;
+      }).join('') +
+    `</select>`
+  ) : '';
 
   // defaulty z liturgie
   function extractRefrain(psalmLines){
@@ -5291,6 +5418,9 @@ function setupAlelujaLitControlsIfNeeded(){
       <div class="lit-admin-title">✏️ ${hasRead2 ? 'Úprava 2. čítania / verša' : 'Úprava žalmu / verša'} (len pre pieseň 999 – Aleluja)</div>
       <div class="lit-admin-sub">Platí pre deň <b>${escapeHtml(iso)}</b> • omša: <b>${escapeHtml(String(m.title||'').trim() || 'vybraná')}</b></div>
 
+      ${massSelectHTML}
+
+      ${isAdmin ? `
       ${mainFields}
 
       <label class="lit-admin-label">${hasRead2 ? 'Aklamácia / verš pred evanjeliom' : 'Alelujový verš'}</label>
@@ -5301,8 +5431,20 @@ function setupAlelujaLitControlsIfNeeded(){
         <button class="btn btn-secondary" id="lit-ov-reset">Obnoviť predvolené</button>
       </div>
       <div class="lit-admin-hint">Uložené úpravy vidí každý (synchronizované cez Google Script) a fungujú aj offline po načítaní.</div>
+      ` : `<div class="lit-admin-hint">Pre úpravy textov sa prihlás do režimu editor (heslo: <b>qwer</b>).</div>`}
     </div>
   `;
+
+  const selMass = document.getElementById('aleluja-lit-select');
+  if (selMass){
+    selMass.addEventListener('change', ()=>{
+      const v = parseInt(selMass.value||'0',10) || 0;
+      setLitMassChoiceIndex(iso, v);
+      // refresh panel + song body
+      try{ setupAlelujaLitControlsIfNeeded(); }catch(e){}
+      try{ renderSong(); }catch(e){}
+    });
+  }
 
   const btnSave = document.getElementById('lit-ov-save');
   const btnReset = document.getElementById('lit-ov-reset');
