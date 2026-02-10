@@ -30,7 +30,7 @@
 // JSONP GET (CORS-free read)
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDFJ_XoBEbg6KYe1oM8Wj9IAzkq4yqzMSkfApgcc3aFeD0-Pxgww/exec';
 // POST endpoint (stable, without redirects) – used for writes
-const SCRIPT_URL_POST = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLju_ASouAiiG5mvUe2YGBZDHtV2dhsjhfJSKpfDMF_hv3tSrtHrruxIGWewkXZ7o-HEpo9eLQPMkOQIEhjf4k2KIKE5SwM7Dy2-9dSHZX9zcx4bcNskpRIX5QDlqt7YULxBGHMxad_TOx49_R6AgGVodCU_-Z3fDijyASqnmCScqHdL9afzKKAwN8CogzEFdEB-F81XY_YVmx9nPepwiYIWSzICJAwdpdTEnRc31pJnHlw8YNHpBlM-zwuP7KB5i6AgTq20fYdfNMAD5er3XMbfE7tuBYHKRCktbXo1&lib=MHLC092P6XK4oKRU9KMqxTCLVZkolgQ1O';
+const SCRIPT_URL_POST = SCRIPT_URL; // always /exec (POST works here)
 
 // ===== META UPDATE BADGE (export + PiesneNaDnes + PlaylistOrder) =====
 const LS_META_SEEN = 'spevnik_meta_seen_v1';
@@ -97,6 +97,14 @@ async function jsonpSave(params){
   const err = (res && res.error) ? String(res.error) : 'save_failed';
   throw new Error(err);
 }
+// ===== GAS SAVE helpers (reliable error reporting) =====
+async function gasSaveFile(name, content){
+  return await jsonpSave({ action:'save', name:String(name||''), pwd:getAuthPwd(), content:String(content ?? '') });
+}
+async function gasDeleteFile(name){
+  return await jsonpSave({ action:'delete', name:String(name||''), pwd:getAuthPwd() });
+}
+
 
 async function checkMetaAndToggleBadge(){
   // Badge check runs every minute. Keep bottom status clean:
@@ -188,8 +196,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v102';
-const APP_CACHE_NAME = 'spevnik-v102';
+const APP_BUILD = 'v103';
+const APP_CACHE_NAME = 'spevnik-v103';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -319,6 +327,13 @@ let lastXmlSyncBytes = 0;
 /* ===== JSONP helper (bypasses CORS for Apps Script) ===== */
 function jsonpRequest(url){
   return new Promise((resolve, reject) => {
+
+    // diagnostics: track last GAS(JSONP) call
+    try{
+      localStorage.setItem('spevnik_last_gas_url', String(url||''));
+      localStorage.setItem('spevnik_last_gas_start', String(Date.now()));
+    }catch(e){}
+
     const cb = "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     const s = document.createElement('script');
     const JSONP_TIMEOUT_MS = 20000;
@@ -337,6 +352,12 @@ function jsonpRequest(url){
       done = true;
       keepNoop();
       cleanupScript();
+      try{
+        localStorage.setItem('spevnik_last_gas_at', String(Date.now()));
+        localStorage.setItem('spevnik_last_gas_ok', '0');
+        localStorage.setItem('spevnik_last_gas_resp_ok', '0');
+        localStorage.setItem('spevnik_last_gas_err', 'timeout');
+      }catch(e){}
       reject(new Error('jsonp timeout'));
     }, JSONP_TIMEOUT_MS);
 
@@ -350,6 +371,12 @@ function jsonpRequest(url){
       cleanupScript();
       // safe cleanup (leave noop for a bit)
       keepNoop();
+      try{
+        localStorage.setItem('spevnik_last_gas_at', String(Date.now()));
+        localStorage.setItem('spevnik_last_gas_ok', '1');
+        localStorage.setItem('spevnik_last_gas_resp_ok', (data && data.ok) ? '1' : '0');
+        localStorage.setItem('spevnik_last_gas_err', '');
+      }catch(e){}
       resolve(data);
     };
 
@@ -365,11 +392,38 @@ function jsonpRequest(url){
       clearTimeout(timer);
       keepNoop();
       cleanupScript();
+      try{
+        localStorage.setItem('spevnik_last_gas_at', String(Date.now()));
+        localStorage.setItem('spevnik_last_gas_ok', '0');
+        localStorage.setItem('spevnik_last_gas_resp_ok', '0');
+        localStorage.setItem('spevnik_last_gas_err', 'load_failed');
+      }catch(e){}
       reject(new Error('JSONP load failed'));
     };
     document.head.appendChild(s);
   });
 }
+// diagnostics: capture last JS error/rejection for easier debugging
+try{
+  window.addEventListener('error', (ev)=>{
+    try{
+      const msg = (ev && ev.message) ? String(ev.message) : 'error';
+      const src = (ev && ev.filename) ? String(ev.filename) : '';
+      const line = (ev && ev.lineno) ? String(ev.lineno) : '';
+      localStorage.setItem('spevnik_last_js_err_at', String(Date.now()));
+      localStorage.setItem('spevnik_last_js_err', msg + (src ? (' @ ' + src + ':' + line) : ''));
+    }catch(e){}
+  });
+  window.addEventListener('unhandledrejection', (ev)=>{
+    try{
+      const r = ev && ev.reason;
+      const msg = (r && r.message) ? String(r.message) : String(r||'unhandledrejection');
+      localStorage.setItem('spevnik_last_js_err_at', String(Date.now()));
+      localStorage.setItem('spevnik_last_js_err', msg);
+    }catch(e){}
+  });
+}catch(e){}
+
 
 const OWNER_PWD = "wert";
 // Owner password (full access). Admins log in with their own password via GAS.
@@ -524,6 +578,11 @@ function applyPermsToUI(){
   const adPanel = document.getElementById('admins-editor-panel');
   if (adPanel) adPanel.style.display = (logged && isOwner()) ? 'block' : 'none';
   if (adPanel && adPanel.style.display === 'block') adPanel.classList.add('collapsed');
+
+  // owner-only: changes panel
+  const chPanel = document.getElementById('changes-editor-panel');
+  if (chPanel) chPanel.style.display = (logged && isOwner()) ? 'block' : 'none';
+  if (chPanel && chPanel.style.display === 'block') chPanel.classList.add('collapsed');
 
   // top actions row (Nová pieseň + owner tools)
   const topActions = document.getElementById('top-actions');
@@ -823,6 +882,44 @@ function buildDiagnosticsText(){
   lines.push(`Aktuálna pieseň: ${currentSong ? (currentSong.displayId + ' – ' + currentSong.title) : '-'}`);
   lines.push(`Zdroj: ${SCRIPT_URL}`);
   lines.push(`UA: ${ua}`);
+
+  // session
+  try{
+    const who = adminSession ? (adminSession.isOwner ? 'owner' : (adminSession.name||'admin')) : 'neprihlásený';
+    lines.push(`Prihlásenie: ${who}`);
+    if (adminSession && !adminSession.isOwner){
+      const p = adminSession.perms || {};
+      const plist = Object.keys(p).filter(k=>p[k]).join(', ') || '(žiadne)';
+      lines.push(`Práva: ${plist}`);
+    }
+  }catch(e){}
+
+  // service worker
+  try{
+    const sw = ('serviceWorker' in navigator);
+    const ctrl = (sw && navigator.serviceWorker.controller) ? 'áno' : 'nie';
+    lines.push(`ServiceWorker: ${sw ? 'áno' : 'nie'} (controller: ${ctrl})`);
+  }catch(e){}
+
+  // last GAS(JSONP)
+  try{
+    const gasUrl = localStorage.getItem('spevnik_last_gas_url') || '-';
+    const gasStart = parseInt(localStorage.getItem('spevnik_last_gas_start')||'0',10) || 0;
+    const gasAt = parseInt(localStorage.getItem('spevnik_last_gas_at')||'0',10) || 0;
+    const gasOk = localStorage.getItem('spevnik_last_gas_ok') || '-';
+    const gasRespOk = localStorage.getItem('spevnik_last_gas_resp_ok') || '-';
+    const gasErr = localStorage.getItem('spevnik_last_gas_err') || '';
+    lines.push(`GAS posledná požiadavka: ${gasOk==='1'?'OK':'ERR'} (resp.ok=${gasRespOk})`);
+    lines.push(`GAS URL: ${gasUrl}`);
+    lines.push(`GAS začiatok: ${fmtDateTime(gasStart)} | koniec: ${fmtDateTime(gasAt)}${gasErr?(' | chyba: '+gasErr):''}`);
+  }catch(e){}
+
+  // last JS error
+  try{
+    const jeAt = parseInt(localStorage.getItem('spevnik_last_js_err_at')||'0',10) || 0;
+    const je = localStorage.getItem('spevnik_last_js_err') || '';
+    if (je) lines.push(`JS chyba: ${fmtDateTime(jeAt)} | ${je}`);
+  }catch(e){}
   return lines.join('\n');
 }
 function openDiagnostics(){
@@ -1252,6 +1349,16 @@ function filterSongs() {
 }
 
 
+function firstChordKeyText(txt){
+  const m = String(txt||'').match(/\[([^\]]+)\]/);
+  if (!m) return '';
+  const chord = String(m[1]||'').trim();
+  if (!chord) return '';
+  const mm = chord.match(/^\s*([A-Ha-h])([#b]?)(m?)/);
+  if (!mm) return '';
+  return (mm[1]||'').toUpperCase() + (mm[2]||'') + (mm[3]||'');
+}
+
 /* ===== SONG DETAIL ===== */
 function openSongById(id, source) {
   currentListSource = source;
@@ -1291,8 +1398,8 @@ function openSongById(id, source) {
 
   document.getElementById('render-title').innerText = `${s.displayId}. ${s.title}`;
 
-  const firstChordMatch = s.origText.match(/\[(.*?)\]/);
-  document.getElementById('original-key-label').innerText = "Pôvodná tónina: " + (firstChordMatch ? firstChordMatch[1] : "-");
+  const k = firstChordKeyText(s.origText);
+  document.getElementById('original-key-label').innerText = "Pôvodná tónina: " + (k || "-");
 
   const subj = document.getElementById('error-subject');
   const hidden = document.getElementById('error-song-hidden');
@@ -2370,9 +2477,6 @@ function applyChordTemplateOverlay(text){
 }
 
 
-// Failsafe: renderKeyHistorySection must always exist (older cached builds may call it)
-function renderKeyHistorySection(_songId){ return ''; }
-
 function renderSong() {
   if (!currentSong) return;
   try { updateSongAdminActions(); } catch(e) {}
@@ -2469,8 +2573,9 @@ function renderSong() {
   // +1 / -2 (samostatný riadok) -> Transpozícia: +1
   text = text.replace(/^\s*([+-]\d+)\s*\n/, 'Transpozícia: $1\n');
   const el = document.getElementById('song-content');
-  const sid = String((currentSong && (currentSong.originalId || currentSong.id)) || '').trim();
-  el.innerHTML = songTextToHTML(text) + renderKeyHistorySection(sid);
+  const sid = String((currentSong && currentSong.id) || '').trim();
+  const __origKey = currentSong ? firstChordKeyText(currentSong.origText) : '';
+  el.innerHTML = songTextToHTML(text) + renderKeyHistorySection(sid, __origKey);
   el.style.fontSize = fontSize + 'px';
 
   // sync presentation overlay
@@ -3362,7 +3467,7 @@ async function saveDnesToHistory(){
   renderHistoryUI(true);
 
   try {
-    await fetch(`${SCRIPT_URL_POST}&action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' });
+    await gasSaveFile(HISTORY_NAME, JSON.stringify(next));
     showToast('Uložené do histórie ✅', true);
   } catch(e) {
     showToast('Nepodarilo sa uložiť do histórie ❌', false);
@@ -3372,19 +3477,19 @@ async function saveDnesToHistory(){
 }
 
 
-function deleteHistoryEntry(ts){
+async function deleteHistoryEntry(ts){
   if (!hasPerm('A')) return;
   if (!confirm('Vymazať tento záznam z histórie?')) return;
   const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
   const next = arr.filter(x => Number(x.ts) !== Number(ts));
   localStorage.setItem(LS_HISTORY, JSON.stringify(next));
   renderHistoryUI(true);
-  try { fetch(`${SCRIPT_URL_POST}&action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
+  try { await gasSaveFile(HISTORY_NAME, JSON.stringify(next)); } catch(e) {}
   loadHistoryFromDrive();
 }
 
 
-function renameHistoryEntry(ts){
+async function renameHistoryEntry(ts){
   if (!hasPerm('A')) return;
   const arr = parseHistory(localStorage.getItem(LS_HISTORY) || "");
   const idx = arr.findIndex(x => Number(x.ts) === Number(ts));
@@ -3397,9 +3502,9 @@ function renameHistoryEntry(ts){
   // persist
   localStorage.setItem(LS_HISTORY, JSON.stringify(arr));
   renderHistoryUI(true);
-  // sync to Drive (best effort)
+  // sync to Drive
   try {
-    fetch(`${SCRIPT_URL_POST}&action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+    await gasSaveFile(HISTORY_NAME, JSON.stringify(arr));
   } catch(e) {}
 }
 
@@ -4089,6 +4194,27 @@ function escapeHtml(s) {
     "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
   }[m]));
 }
+
+function escapeAttr(s) {
+  // Safe for embedding inside HTML attributes and in single-quoted JS strings (onclick="fn('...')").
+  let out = String(s ?? "");
+  // JS escaping for single-quoted string
+  out = out
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
+
+  // HTML attribute escaping (attribute is usually wrapped in double quotes)
+  out = out
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  return out;
+}
+
 
 
 /* ===== FONT SIZE UI (DETAIL) ===== */
@@ -6387,6 +6513,13 @@ function toggleBackupMore(force){
 
 /* ===== v96: Editor transpozícia akordov (uložiť natrvalo) ===== */
 let __editorTransposeBaseText = null;
+let __editorTransposeTotalStep = 0; // cumulative transpose in editor (for D server guard)
+
+// D-mode chord lock (prevents editing anything inside [...])
+let __dChordLockEnabled = false;
+let __dChordLockLastGood = '';
+let __dChordLockChordsSig = '';
+let __dChordLockBypass = false;
 
 function _normalizeNoteToken(tok){
   // support Slovak naming (B= Bb, H = B natural) and flats
@@ -6457,7 +6590,7 @@ function _transposeChordStrict(ch, step){
 }
 
 function editorTranspose(step){
-  if (!(isOwner() || hasPerm('E'))) return;
+  if (!(isOwner() || hasPerm('E') || hasPerm('D'))) return;
   const ta = document.getElementById('se-text');
   if (!ta) return;
 
@@ -6466,17 +6599,44 @@ function editorTranspose(step){
 
   const src = String(ta.value||'');
   const next = src.replace(CHORD_TOKEN_RE_G, (m0, c) => `[${_transposeChordStrict(c, step)}]`);
+
+  // D-mode chord lock: allow this programmatic chord change
+  __dChordLockBypass = true;
   ta.value = next;
+  __dChordLockBypass = false;
+
+  // track cumulative transpose so server can allow chord changes for D
+  try{
+    __editorTransposeTotalStep = (Number(__editorTransposeTotalStep)||0) + Number(step||0);
+    // keep in [-11..11] range (same song)
+    while (__editorTransposeTotalStep > 11) __editorTransposeTotalStep -= 12;
+    while (__editorTransposeTotalStep < -11) __editorTransposeTotalStep += 12;
+  }catch(e){}
+
+  // update chord signature baseline for D lock
+  try{
+    __dChordLockChordsSig = (String(ta.value||'').match(/\[[^\]]*\]/g) || []).join('|');
+    __dChordLockLastGood = String(ta.value||'');
+  }catch(e){}
 }
 
 function editorTransposeReset(){
-  if (!(isOwner() || hasPerm('E'))) return;
+  if (!(isOwner() || hasPerm('E') || hasPerm('D'))) return;
   const ta = document.getElementById('se-text');
   if (!ta) return;
+
   if (__editorTransposeBaseText != null){
+    __dChordLockBypass = true;
     ta.value = __editorTransposeBaseText;
+    __dChordLockBypass = false;
   }
   __editorTransposeBaseText = null;
+  __editorTransposeTotalStep = 0;
+
+  try{
+    __dChordLockChordsSig = (String(ta.value||'').match(/\[[^\]]*\]/g) || []).join('|');
+    __dChordLockLastGood = String(ta.value||'');
+  }catch(e){}
 }
 
 /* ===== v96: Verzie piesne (owner) ===== */
@@ -6651,11 +6811,36 @@ if (on){
 
   // editor chord transpose (owner + E)
   const tr = document.getElementById('editor-transpose-row');
-  if (tr) tr.style.display = (isOwner() || hasPerm('E')) ? 'flex' : 'none';
+  if (tr) tr.style.display = (isOwner() || hasPerm('E') || hasPerm('D')) ? 'flex' : 'none';
 
   // close advanced backup panel by default
   try{ toggleBackupMore(false); }catch(e){}
   try{ renderSongVersionsUI([]); }catch(e){}
+
+
+  // reset transpose tracking every time editor opens
+  __editorTransposeBaseText = null;
+  __editorTransposeTotalStep = 0;
+
+  // D-mode chord lock + disable bracket buttons
+  try{
+    __dChordLockEnabled = (!isOwner() && hasPerm('D') && !hasPerm('E'));
+    const ta = document.getElementById('se-text');
+    if (ta){
+      __dChordLockLastGood = String(ta.value||'');
+      __dChordLockChordsSig = (String(ta.value||'').match(/\[[^\]]*\]/g) || []).join('|');
+    }
+    // hide/disable bracket helper buttons in D
+    const btns = m.querySelectorAll('.chip-btn');
+    btns.forEach(b=>{
+      const lab = (b.textContent||'').trim();
+      if (lab === '[' || lab === ']'){
+        b.disabled = __dChordLockEnabled;
+        b.style.opacity = __dChordLockEnabled ? '0.35' : '';
+        b.style.pointerEvents = __dChordLockEnabled ? 'none' : '';
+      }
+    });
+  }catch(e){}
 }
   document.body.classList.toggle('modal-open', !!on);
 
@@ -6734,7 +6919,7 @@ async function saveSongEditor(){
   setSyncStatus("Aktualizujem…", "warn", 0);
   showToast('Ukladám...', true, 0);
 
-  const payload = { id: String(seEditingId||''), author: originalId, title: ttl, songtext: txt, mode: mode, isNew: !!seIsNew };
+  const payload = { id: String(seEditingId||''), author: originalId, title: ttl, songtext: txt, mode: mode, isNew: !!seIsNew, transposeStep: Number(__editorTransposeTotalStep||0) };
 
   try{
     await jsonpSave({ action:'songSave', pwd:getAuthPwd(), payload: JSON.stringify(payload) });
@@ -6743,6 +6928,21 @@ async function saveSongEditor(){
     const beforeMeta = getSeenMeta();
     await runUpdateNow(true);
     const afterMeta = getSeenMeta();
+
+    // If song detail is open for this song, refresh currentSong + header immediately
+    try{
+      if (currentSong && String(currentSong.id||'') === String(seEditingId||'')){
+        const fresh = (songs||[]).find(x => String(x.id||'') === String(seEditingId||''));
+        if (fresh){
+          currentSong = JSON.parse(JSON.stringify(fresh));
+          const k2 = firstChordKeyText(currentSong.origText);
+          const lab = document.getElementById('original-key-label');
+          if (lab) lab.innerText = "Pôvodná tónina: " + (k2 || "-");
+          try{ renderSong(); }catch(e){}
+        }
+      }
+    }catch(e){}
+
     if (beforeMeta && afterMeta && Number(afterMeta.export||0) === Number(beforeMeta.export||0)){
       setSaveStatus('Pozor: zmena sa možno neuložila na server (export sa nezmenil).', 'err', 3200);
     } else {
@@ -6935,6 +7135,59 @@ function downloadBlob(text, filename, mime){
 function initSongEditor(){
   // make sure edits are loaded
   try{ loadSongEdits(); }catch(e){}
+
+  // D-mode chord lock: allow editing only outside [...]
+  try{
+    const ta = document.getElementById('se-text');
+    if (ta && !ta.dataset.dlockInited){
+      ta.dataset.dlockInited = '1';
+
+      let lastWarnAt = 0;
+
+      function chordsSig(txt){
+        return (String(txt||'').match(/\[[^\]]*\]/g) || []).join('|');
+      }
+
+      // prevent typing brackets directly in D
+      ta.addEventListener('keydown', (ev)=>{
+        if (!__dChordLockEnabled) return;
+        if (__dChordLockBypass) return;
+        if (ev.key === '[' || ev.key === ']'){
+          ev.preventDefault();
+          const now = Date.now();
+          if (now - lastWarnAt > 1200){
+            lastWarnAt = now;
+            showToast('Admin D môže meniť iba text (akordy sú zamknuté).', false, 2200);
+          }
+        }
+      });
+
+      ta.addEventListener('input', ()=>{
+        try{
+          if (!__dChordLockEnabled) return;
+          if (__dChordLockBypass) return;
+          const cur = String(ta.value||'');
+          const sig = chordsSig(cur);
+          if (__dChordLockChordsSig && sig !== __dChordLockChordsSig){
+            __dChordLockBypass = true;
+            ta.value = __dChordLockLastGood;
+            __dChordLockBypass = false;
+            // keep caret near end (good enough)
+            try{ ta.selectionStart = ta.selectionEnd = Math.min(ta.value.length, ta.selectionStart||ta.value.length); }catch(e){}
+            const now = Date.now();
+            if (now - lastWarnAt > 1200){
+              lastWarnAt = now;
+              showToast('Admin D môže meniť iba text (akordy sú zamknuté).', false, 2400);
+            }
+            return;
+          }
+          // update baseline if chords unchanged
+          __dChordLockChordsSig = sig;
+          __dChordLockLastGood = cur;
+        }catch(e){}
+      });
+    }
+  }catch(e){}
 
   const roots = ['C','C#','D','D#','E','F','F#','G','G#','A','B','H'];
   const quals = ['', 'm', '7', 'm7', 'maj7', 'sus4', 'sus2', 'add9', '6', '9', 'dim', 'aug'];
@@ -7299,19 +7552,70 @@ async function adminDeleteSelected(){
 let _changesCache = [];
 let _changesOpenId = null;
 
+function _fmtSkDate(ts, withTime){
+  const t = Number(ts||0);
+  if (!t) return '';
+  try{
+    const d = new Date(t);
+    if (isNaN(d.getTime())) return '';
+    const dd = d.getDate();       // no leading zeros (1.1.2026)
+    const mm = d.getMonth()+1;
+    const yy = d.getFullYear();
+    if (!withTime) return `${dd}.${mm}.${yy}`;
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mi = String(d.getMinutes()).padStart(2,'0');
+    return `${dd}.${mm}.${yy} ${hh}:${mi}`;
+  }catch(e){ return ''; }
+}
+
+function _typesLabel(types){
+  const arr = Array.isArray(types) ? types : [];
+  if (!arr.length) return '';
+  // keep short and readable
+  return arr.join(', ');
+}
+
 async function loadChangesList(){
   if (!isOwner()) return;
   const box = document.getElementById('changes-list');
   const det = document.getElementById('changes-detail');
   if (det){ det.style.display='none'; det.innerHTML=''; }
   if (box) box.innerHTML = '<div class="small-muted">Načítavam…</div>';
+
   try{
-    const data = await jsonpRequest(`${SCRIPT_URL}?action=changesList&pwd=${encodeURIComponent(getAuthPwd())}`);
+    // 1) list of changes
+    const data = await jsonpRequest(`${SCRIPT_URL}?action=changesGet&pwd=${encodeURIComponent(getAuthPwd())}`);
     if (!data || !data.ok){
       if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať zmeny.</div>';
       return;
     }
-    _changesCache = Array.isArray(data.list) ? data.list : [];
+    const list = Array.isArray(data.list) ? data.list : [];
+
+    // 2) seen map (owner)
+    const seenRes = await jsonpRequest(`${SCRIPT_URL}?action=changesSeenGet&pwd=${encodeURIComponent(getAuthPwd())}`);
+    const seen = (seenRes && seenRes.ok && seenRes.seen && typeof seenRes.seen === 'object') ? seenRes.seen : {};
+
+    _changesCache = list.slice(0, 50).map(ch=>{
+      const id = String(ch.id||'');
+      const ts = Number(ch.ts||0) || 0;
+      return {
+        id,
+        ts,
+        who: String(ch.who||''),
+        songId: String(ch.songId||''),
+        number: String(ch.number||''),
+        title: String(ch.title||''),
+        types: Array.isArray(ch.types) ? ch.types : [],
+        titleFrom: String(ch.titleFrom||''),
+        titleTo: String(ch.titleTo||''),
+        numberFrom: String(ch.numberFrom||''),
+        numberTo: String(ch.numberTo||''),
+        keyFrom: String(ch.keyFrom||''),
+        keyTo: String(ch.keyTo||''),
+        unread: !(seen && seen[id])
+      };
+    });
+
     renderChangesList();
   }catch(e){
     if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať zmeny.</div>';
@@ -7322,25 +7626,31 @@ function renderChangesList(){
   const box = document.getElementById('changes-list');
   if (!box) return;
   box.innerHTML = '';
+
   if (!_changesCache.length){
     box.innerHTML = '<div class="small-muted">Zatiaľ žiadne zmeny.</div>';
     return;
   }
+
   _changesCache.forEach(ch=>{
     const row = document.createElement('div');
     row.className = 'editor-item';
     if (ch.unread) row.classList.add('unread-item');
-    const when = escapeHtml(String(ch.date||''));
-    const who = escapeHtml(String(ch.who||''));
-    const title = escapeHtml(String(ch.songTitle||''));
-    const type = escapeHtml(String(ch.type||''));
+
+    const when = escapeHtml(_fmtSkDate(ch.ts, true));
+    const who = escapeHtml(ch.who || '');
+    const title = escapeHtml(ch.title || '');
+    const num = escapeHtml(ch.number || '');
+    const types = escapeHtml(_typesLabel(ch.types));
+
     row.innerHTML = `<div style="display:flex; justify-content:space-between; gap:10px;">
       <div style="flex:1; min-width:0;">
-        <div><b>${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(String(ch.songId||''))}</span></div>
-        <div class="small-muted">${type}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+        <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
+        <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
       </div>
       <div><button class="btn-neutral">Detail</button></div>
     </div>`;
+
     row.querySelector('button').onclick = ()=>openChangeDetail(String(ch.id||''));
     box.appendChild(row);
   });
@@ -7351,26 +7661,37 @@ function openChangeDetail(id){
   const ch = _changesCache.find(x=>String(x.id)===_changesOpenId);
   const det = document.getElementById('changes-detail');
   if (!det || !ch) return;
-  const title = escapeHtml(String(ch.songTitle||''));
-  const type = escapeHtml(String(ch.type||''));
-  const who = escapeHtml(String(ch.who||''));
-  const when = escapeHtml(String(ch.date||''));
-  const info = escapeHtml(String(ch.info||''));
+
+  const title = escapeHtml(ch.title || '');
+  const num = escapeHtml(ch.number || '');
+  const types = escapeHtml(_typesLabel(ch.types));
+  const who = escapeHtml(ch.who || '');
+  const when = escapeHtml(_fmtSkDate(ch.ts, true));
+
+  const parts = [];
+  if (ch.titleFrom && ch.titleFrom !== ch.titleTo) parts.push(`Názov: ${escapeHtml(ch.titleFrom)} → ${escapeHtml(ch.titleTo)}`);
+  if (ch.numberFrom && ch.numberFrom !== ch.numberTo) parts.push(`Číslo: ${escapeHtml(ch.numberFrom)} → ${escapeHtml(ch.numberTo)}`);
+  if (ch.keyTo && ch.keyFrom !== ch.keyTo){
+    parts.push(`Tonina: ${escapeHtml(ch.keyFrom||'—')} → ${escapeHtml(ch.keyTo)}`);
+  }
+  const info = parts.length ? `<div style="margin-top:8px; white-space:pre-wrap;">${parts.join('\n')}</div>` : '';
+
   det.style.display='block';
   det.innerHTML = `
     <div class="modal-hint" style="margin:0;">
       <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
         <div style="flex:1;">
-          <div><b>${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(String(ch.songId||''))}</span></div>
-          <div class="small-muted">${type}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+          <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
+          <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
         </div>
         <button class="btn-danger" id="ch-close-btn">Zavrieť</button>
       </div>
-      ${info ? `<div style="margin-top:8px; white-space:pre-wrap;">${info}</div>` : ''}
+      ${info}
       <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn-primary" id="ch-open-song">Otvoriť pieseň</button>
       </div>
     </div>`;
+
   det.querySelector('#ch-open-song').onclick = ()=>{
     try{ openSongByAnyId(String(ch.songId||'')); }catch(e){}
   };
@@ -7380,16 +7701,18 @@ function openChangeDetail(id){
 async function closeChangeDetail(){
   const det = document.getElementById('changes-detail');
   if (det){ det.style.display='none'; det.innerHTML=''; }
+
   const id = _changesOpenId;
   _changesOpenId = null;
   if (!id) return;
+
   try{
-    await jsonpRequest(`${SCRIPT_URL}?action=changesSeen&pwd=${encodeURIComponent(getAuthPwd())}&id=${encodeURIComponent(id)}`);
-    // refresh local state
+    await jsonpRequest(`${SCRIPT_URL}?action=changesSeenSet&pwd=${encodeURIComponent(getAuthPwd())}&payload=${encodeURIComponent(JSON.stringify({ ids:[id], seen:true }))}`);
     _changesCache = _changesCache.map(x=> (String(x.id)===id ? { ...x, unread:false } : x));
     renderChangesList();
   }catch(e){}
 }
+
 
 // Helper for places where we may only know numeric "author" (originalId) or the internal XML <ID>.
 // NOTE: Do NOT overwrite openSongById(id, source) which drives the whole UI.
@@ -7442,23 +7765,44 @@ function _khCacheKey(sid){ return KEY_HIST_CACHE_PREFIX + String(sid||""); }
 function _khLoadCache(sid){ try{ return JSON.parse(localStorage.getItem(_khCacheKey(sid)) || "null"); }catch(e){ return null; } }
 function _khSaveCache(sid, obj){ try{ localStorage.setItem(_khCacheKey(sid), JSON.stringify(obj||null)); }catch(e){} }
 
-function renderKeyHistorySection(songId){
+function renderKeyHistorySection(songId, origKey){
   const sid = String(songId||"");
   const cached = _khLoadCache(sid);
-  const list = (cached && Array.isArray(cached.list)) ? cached.list : [];
+  const raw = (cached && Array.isArray(cached.list)) ? cached.list : [];
+
+  // baseline row:
+  // - if first record has empty "from", it is the creation / first detected key -> use its timestamp (new songs)
+  // - otherwise show 1.1.2026 + "Pôvodná tonina: X" derived from first chord (existing songs without history)
+  let baseTs = 0;
+  let baseWho = "—";
+  let baseKey = String(origKey||"");
+  let list = raw;
+
+  if (raw.length && !String(raw[0].from||"").trim()){
+    baseTs = Number(raw[0].ts||0) || 0;
+    baseWho = String(raw[0].who||"—");
+    baseKey = String(raw[0].to||"");
+    list = raw.slice(1);
+  } else if (raw.length && String(raw[0].from||"").trim()){
+    // existing song: best-known original key is the "from" of the first recorded change
+    baseKey = String(raw[0].from||"");
+  }
+
+  const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
+  const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
 
   const rows = list.map((r)=>{
     const ts = String(r.ts||"");
     const who = String(r.who||"—");
-    const dt = String(r.date||KEY_HIST_DEFAULT_DATE);
+    const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
     const fromK = String(r.from||"");
     const toK = String(r.to||"");
-    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : escapeHtml(toK);
+    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
     const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
     return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
   }).join('');
 
-  const placeholder = `<div class="kh-row"><span class="kh-who">—</span><span class="kh-dt">${KEY_HIST_DEFAULT_DATE}</span><span class="kh-to"></span></div>`;
+  const baseline = `<div class="kh-row" id="kh-base-${escapeAttr(sid)}"><span class="kh-who">${escapeHtml(baseWho)}</span><span class="kh-dt">${escapeHtml(baseDt)}</span><span class="kh-to">${baseLine}</span></div>`;
 
   return `
     <div class="kh-wrap">
@@ -7467,13 +7811,16 @@ function renderKeyHistorySection(songId){
         <span class="kh-caret" id="kh-caret-${escapeAttr(sid)}">▸</span>
       </div>
       <div class="kh-body" id="kh-body-${escapeAttr(sid)}" style="display:none;">
-        ${placeholder}
+        ${baseline}
         <div class="kh-rows" id="kh-rows-${escapeAttr(sid)}">${rows}</div>
         ${isOwner() ? `<div class="kh-actions"><button class="btn-neutral" onclick="keyHistoryClear('${escapeAttr(sid)}'); event.stopPropagation();">Vymazať históriu</button></div>` : ``}
       </div>
     </div>
   `;
 }
+// Ensure availability even with service-worker stale scopes
+try { window.renderKeyHistorySection = renderKeyHistorySection; } catch(e) {}
+
 
 async function toggleKeyHistory(songId){
   const sid = String(songId||"");
@@ -7492,17 +7839,49 @@ async function keyHistoryRefresh(songId){
   try{
     const res = await jsonpRequest(addParams(SCRIPT_URL, { action:'keyHistoryGet', id:sid }));
     if (res && res.ok){
-      _khSaveCache(sid, { list: Array.isArray(res.list) ? res.list : [] });
+      const raw = Array.isArray(res.list) ? res.list : [];
+      _khSaveCache(sid, { list: raw });
+
+      // best-effort original key from current song (for older songs with no history)
+      let origKey = '';
+      try{
+        if (currentSong && String(currentSong.id||'') === sid){
+          origKey = firstChordKeyText(currentSong.origText);
+        }
+      }catch(e){}
+
+      let baseTs = 0;
+      let baseWho = '—';
+      let baseKey = String(origKey||'');
+      let list = raw;
+
+      if (raw.length && !String(raw[0].from||'').trim()){
+        baseTs = Number(raw[0].ts||0) || 0;
+        baseWho = String(raw[0].who||'—');
+        baseKey = String(raw[0].to||'');
+        list = raw.slice(1);
+      } else if (raw.length && String(raw[0].from||'').trim()){
+        baseKey = String(raw[0].from||'');
+      }
+
+      // update baseline row
+      const baseEl = document.getElementById(`kh-base-${sid}`);
+      if (baseEl){
+        const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
+        const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
+        baseEl.innerHTML = `<span class="kh-who">${escapeHtml(baseWho)}</span><span class="kh-dt">${escapeHtml(baseDt)}</span><span class="kh-to">${baseLine}</span>`;
+      }
+
+      // update rows
       const rowsEl = document.getElementById(`kh-rows-${sid}`);
       if (rowsEl){
-        const list = Array.isArray(res.list) ? res.list : [];
         rowsEl.innerHTML = list.map((r)=>{
           const ts = String(r.ts||"");
           const who = String(r.who||"—");
-          const dt = String(r.date||KEY_HIST_DEFAULT_DATE);
+          const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
           const fromK = String(r.from||"");
           const toK = String(r.to||"");
-          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : escapeHtml(toK);
+          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
           const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
           return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
         }).join('');
