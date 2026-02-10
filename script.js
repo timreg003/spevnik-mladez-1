@@ -6734,14 +6734,8 @@ async function saveSongEditor(){
   const payload = { id: String(seEditingId||''), author: originalId, title: ttl, songtext: txt, mode: mode, isNew: !!seIsNew };
 
   try{
-    const body = new URLSearchParams();
-    body.set('action','songSave');
-    body.set('pwd', getAuthPwd());
-    body.set('payload', JSON.stringify(payload));
-
-    // no-cors: we can't read response, but request will reach GAS
-    await fetch(SCRIPT_URL_POST, { method:'POST', mode:'no-cors', body });
-
+    await jsonpSave({ action:'songSave', pwd:getAuthPwd(), payload: JSON.stringify(payload) });
+    await updateSeenMetaFromServer();
     // Refresh from server so EVERYONE sees it and we keep exact export structure
     const beforeMeta = getSeenMeta();
     await runUpdateNow(true);
@@ -6775,12 +6769,8 @@ async function deleteSongEditor(){
   showToast('Mažem...', true, 0);
 
   try{
-    const body = new URLSearchParams();
-    body.set('action','songTrash');
-    body.set('pwd', getAuthPwd());
-    body.set('id', String(seEditingId));
-
-    await fetch(SCRIPT_URL_POST, { method:'POST', mode:'no-cors', body });
+    await jsonpSave({ action:'songTrash', pwd:getAuthPwd(), id: String(seEditingId) });
+    await updateSeenMetaFromServer();
     await runUpdateNow(true);
     showToast('Presunuté do koša', true, 1500);
     closeSongEditor(true);
@@ -7413,7 +7403,7 @@ function openSongByAnyId(id){
 
 
 
-// ===== v99 helpers =====
+// ===== v100 helpers =====
 function showMyRights(){
   if (!adminSession){
     showToast('Nie si prihlásený.', false);
@@ -7437,3 +7427,105 @@ function showMyRights(){
 if (typeof window.openSong !== 'function' && typeof openSongById === 'function') {
   window.openSong = openSongById;
 }
+
+
+// ===== HISTÓRIA TONINY (public, collapsible) =====
+// Backend: GAS action=keyHistoryGet returns { ok:true, id, list:[{ts, who, date, from, to}] }
+// Always visible; inside is collapsible. Placeholder date is fixed 1.1.2026.
+const KEY_HIST_DEFAULT_DATE = "1.1.2026";
+const KEY_HIST_CACHE_PREFIX = "spevnik_keyhist_v1_";
+
+function _khCacheKey(sid){ return KEY_HIST_CACHE_PREFIX + String(sid||""); }
+function _khLoadCache(sid){ try{ return JSON.parse(localStorage.getItem(_khCacheKey(sid)) || "null"); }catch(e){ return null; } }
+function _khSaveCache(sid, obj){ try{ localStorage.setItem(_khCacheKey(sid), JSON.stringify(obj||null)); }catch(e){} }
+
+function renderKeyHistorySection(songId){
+  const sid = String(songId||"");
+  const cached = _khLoadCache(sid);
+  const list = (cached && Array.isArray(cached.list)) ? cached.list : [];
+
+  const rows = list.map((r)=>{
+    const ts = String(r.ts||"");
+    const who = String(r.who||"—");
+    const dt = String(r.date||KEY_HIST_DEFAULT_DATE);
+    const fromK = String(r.from||"");
+    const toK = String(r.to||"");
+    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : escapeHtml(toK);
+    const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
+    return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
+  }).join('');
+
+  const placeholder = `<div class="kh-row"><span class="kh-who">—</span><span class="kh-dt">${KEY_HIST_DEFAULT_DATE}</span><span class="kh-to"></span></div>`;
+
+  return `
+    <div class="kh-wrap">
+      <div class="kh-head" onclick="toggleKeyHistory('${escapeAttr(sid)}')">
+        <span class="kh-title">História toniny</span>
+        <span class="kh-caret" id="kh-caret-${escapeAttr(sid)}">▸</span>
+      </div>
+      <div class="kh-body" id="kh-body-${escapeAttr(sid)}" style="display:none;">
+        ${placeholder}
+        <div class="kh-rows" id="kh-rows-${escapeAttr(sid)}">${rows}</div>
+        ${isOwner() ? `<div class="kh-actions"><button class="btn-neutral" onclick="keyHistoryClear('${escapeAttr(sid)}'); event.stopPropagation();">Vymazať históriu</button></div>` : ``}
+      </div>
+    </div>
+  `;
+}
+
+async function toggleKeyHistory(songId){
+  const sid = String(songId||"");
+  const body = document.getElementById(`kh-body-${sid}`);
+  const caret = document.getElementById(`kh-caret-${sid}`);
+  if (!body) return;
+  const willShow = body.style.display === 'none';
+  body.style.display = willShow ? 'block' : 'none';
+  if (caret) caret.textContent = willShow ? '▾' : '▸';
+  if (willShow) await keyHistoryRefresh(sid);
+}
+
+async function keyHistoryRefresh(songId){
+  const sid = String(songId||"");
+  if (!navigator.onLine) return;
+  try{
+    const res = await jsonpRequest(addParams(SCRIPT_URL, { action:'keyHistoryGet', id:sid }));
+    if (res && res.ok){
+      _khSaveCache(sid, { list: Array.isArray(res.list) ? res.list : [] });
+      const rowsEl = document.getElementById(`kh-rows-${sid}`);
+      if (rowsEl){
+        const list = Array.isArray(res.list) ? res.list : [];
+        rowsEl.innerHTML = list.map((r)=>{
+          const ts = String(r.ts||"");
+          const who = String(r.who||"—");
+          const dt = String(r.date||KEY_HIST_DEFAULT_DATE);
+          const fromK = String(r.from||"");
+          const toK = String(r.to||"");
+          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : escapeHtml(toK);
+          const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
+          return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
+        }).join('');
+      }
+    }
+  }catch(e){}
+}
+
+async function keyHistoryDelete(songId, ts){
+  if (!isOwner()) return;
+  const sid = String(songId||"");
+  try{
+    await jsonpSave({ action:'keyHistoryDelete', pwd:getAuthPwd(), id:sid, ts:String(ts||"") });
+    await keyHistoryRefresh(sid);
+  }catch(e){ showToast('Zlyhalo.', false, 2000); }
+}
+
+async function keyHistoryClear(songId){
+  if (!isOwner()) return;
+  const sid = String(songId||"");
+  if (!confirm('Vymazať históriu toniny?')) return;
+  try{
+    await jsonpSave({ action:'keyHistoryClear', pwd:getAuthPwd(), id:sid });
+    _khSaveCache(sid, { list: [] });
+    const rowsEl = document.getElementById(`kh-rows-${sid}`);
+    if (rowsEl) rowsEl.innerHTML = '';
+  }catch(e){ showToast('Zlyhalo.', false, 2000); }
+}
+
