@@ -5,16 +5,16 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <title>Mládežnícky spevník NIŽNÁ</title>
-<link href="manifest.json?v=96" rel="manifest"/>
+<link href="manifest.json?v=97" rel="manifest"/>
 <meta content="#00bfff" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="Spevník" name="apple-mobile-web-app-title"/>
-<link href="icon.png?v=96" rel="apple-touch-icon"/>
-<link href="icon.png?v=96" rel="icon" type="image/png"/>
+<link href="icon.png?v=97" rel="apple-touch-icon"/>
+<link href="icon.png?v=97" rel="icon" type="image/png"/>
 <link crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
-<link href="style.css?v=96" rel="stylesheet">
+<link href="style.css?v=97" rel="stylesheet">
 </link></link></link></head>
 <body>
 <div class="toast" id="toast" style="display:none;"></div>
@@ -42,7 +42,68 @@
 </div>
 <!-- LIST VIEW -->
 <div id="song-list">
-<div id="song-new-btn-wrap" style="display:none; margin:8px 0;"><button class="btn-neutral" id="song-new-btn-list" onclick="openSongEditorNew()"><i class="fas fa-plus"></i> Nová pieseň</button></div><input autocomplete="off" id="search" oninput="filterSongs()" placeholder="Hľadať pieseň alebo číslo..." type="text"/>
+<div id="top-actions" style="display:none; margin:8px 0; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+  <button class="btn-neutral" id="song-new-btn-list" onclick="openSongEditorNew()"><i class="fas fa-plus"></i> Nová pieseň</button>
+  <button class="btn-neutral" id="admins-open-btn" onclick="toggleEditor('admins-editor-panel')" style="display:none;"><i class="fas fa-user-shield"></i> Správa adminov</button>
+  <button class="btn-neutral" id="changes-open-btn" onclick="toggleEditor('changes-editor-panel')" style="display:none;"><i class="fas fa-clock-rotate-left"></i> Zmeny</button>
+</div>
+
+<!-- Owner-only panels live here (NOT inside sekcie), aby neboli schované pri zrolovaní -->
+<div class="editor-panel" id="admins-editor-panel" style="display:none; margin-top:6px;">
+  <div class="editor-toggle" onclick="toggleEditor('admins-editor-panel')">
+    <div class="editor-toggle-title">Správa adminov</div>
+    <i class="fas fa-chevron-down editor-toggle-ico"></i>
+  </div>
+  <div class="editor-body">
+    <h3 class="editor-title">Správa adminov</h3>
+    <div class="editor-subtitle">Práva</div>
+    <div class="modal-hint" style="margin-top:0;">
+      <div><b>A</b> – Piesne na dnes + história (názov, poradie, uložiť do histórie)</div>
+      <div><b>B</b> – Playlisty (názvy, piesne, poradie)</div>
+      <div><b>C</b> – Liturgia (pieseň 999 Aleluja + liturgický kalendár)</div>
+      <div><b>D</b> – Editor piesní: iba text + transpozícia akordov</div>
+      <div><b>E</b> – Editor piesní: text + akordy + transpozícia</div>
+    </div>
+
+    <div class="editor-subtitle" style="margin-top:10px;">Zoznam adminov</div>
+    <div class="editor-list" id="admins-list"></div>
+
+    <div class="editor-subtitle" style="margin-top:10px;">Pridať / upraviť admina</div>
+    <input id="admin-pwd" placeholder="Heslo admina (oni sa prihlasujú týmto)" type="text"/>
+    <input id="admin-name" maxlength="40" placeholder="Meno (iba pre ownera)" type="text"/>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">
+      <label><input id="perm-A" type="checkbox"/> A</label>
+      <label><input id="perm-B" type="checkbox"/> B</label>
+      <label><input id="perm-C" type="checkbox"/> C</label>
+      <label><input id="perm-D" type="checkbox"/> D</label>
+      <label><input id="perm-E" type="checkbox"/> E</label>
+    </div>
+    <div class="btn-row" style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn-primary" onclick="adminNew()">+ Nový</button>
+      <button class="btn-primary" onclick="adminSave()">Uložiť</button>
+      <button class="btn-neutral" onclick="adminClearForm()">Vyčistiť</button>
+      <button class="btn-danger" onclick="adminDeleteSelected()">Odstrániť</button>
+    </div>
+    <small style="display:block; margin-top:6px; opacity:0.8;">Tip: Pre zmenu hesla vyber admina, zadaj nové heslo a klikni Uložiť. (Staré heslo sa zneplatní.)</small>
+  </div>
+</div>
+
+<div class="editor-panel" id="changes-editor-panel" style="display:none; margin-top:6px;">
+  <div class="editor-toggle" onclick="toggleEditor('changes-editor-panel')">
+    <div class="editor-toggle-title">Zmeny</div>
+    <i class="fas fa-chevron-down editor-toggle-ico"></i>
+  </div>
+  <div class="editor-body">
+    <h3 class="editor-title">Zmeny (posledných 50)</h3>
+    <div class="btn-row" style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn-neutral" onclick="loadChangesList()">Obnoviť</button>
+    </div>
+    <div class="editor-list" id="changes-list" style="margin-top:8px;"></div>
+    <div id="changes-detail" style="display:none; margin-top:10px;"></div>
+  </div>
+</div>
+
+<input autocomplete="off" id="search" oninput="filterSongs()" placeholder="Hľadať pieseň alebo číslo..." type="text"/>
 <!-- DNES -->
 <div class="section-header" onclick="toggleSection('dnes')">
 <h2 class="playlist-header-title" id="dnes-title">PIESNE NA DNES</h2>
@@ -70,35 +131,6 @@
 <button class="btn-delete" onclick="clearDnesSelection()">VYMAZAŤ</button>
 </div>
 </div>
-</div>
-<div class="editor-panel" id="admins-editor-panel" style="display:none;">
-<div class="editor-toggle" onclick="toggleEditor('admins-editor-panel')">
-<div class="editor-toggle-title">Správa adminov</div>
-<i class="fas fa-chevron-down editor-toggle-ico"></i>
-</div>
-<div class="editor-body">
-<h3 class="editor-title">Správa adminov</h3>
-<div class="editor-subtitle">Zoznam adminov</div>
-<div class="editor-list" id="admins-list"></div>
-<div class="editor-subtitle" style="margin-top:10px;">Pridať / upraviť admina</div>
-<input id="admin-pwd" placeholder="Heslo admina (oni sa prihlasujú týmto)" type="password"/>
-<input id="admin-name" maxlength="40" placeholder="Meno (iba pre ownera)" type="text"/>
-<div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">
-<label><input id="perm-A" type="checkbox"/> A</label>
-<label><input id="perm-B" type="checkbox"/> B</label>
-<label><input id="perm-C" type="checkbox"/> C</label>
-<label><input id="perm-D" type="checkbox"/> D</label>
-<label><input id="perm-E" type="checkbox"/> E</label>
-</div>
-<div class="btn-row" style="display:flex; gap:10px; flex-wrap:wrap;">
-<button class="btn-primary" onclick="adminSave()">Uložiť admina</button>
-<button class="btn-neutral" onclick="adminClearForm()">Vyčistiť</button>
-<button class="btn-danger" onclick="adminDeleteSelected()">Odstrániť vybraného</button>
-</div>
-<small style="display:block; margin-top:6px; opacity:0.8;">Tip: Pre zmenu hesla vyber admina a zadaj nové heslo, potom Uložiť. (Staré heslo sa zneplatní.)</small>
-</div>
-</div>
-
 </div>
 <!-- PLAYLISTY -->
 <div class="section-header" onclick="toggleSection('playlists')">
@@ -279,7 +311,7 @@
 <span class="psSpeed" id="psSpeed">Rýchlosť: 1</span>
 <button aria-label="Ukončiť" id="psExit" onclick="exitPresentationMode()"><i class="fas fa-xmark"></i></button>
 </div>
-<script src="script.js?v=96"></script>
+<script src="script.js?v=97"></script>
 <!-- FORM EDITOR MODAL -->
 <div class="modal-overlay" id="form-modal" style="display:none;">
 <div aria-labelledby="form-modal-title" aria-modal="true" class="modal-sheet" role="dialog">

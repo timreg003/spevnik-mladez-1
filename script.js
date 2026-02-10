@@ -27,7 +27,10 @@
   }, { passive: false });
 })();
 
+// JSONP GET (CORS-free read)
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyrD8pCxgQYiERsOsDFJ_XoBEbg6KYe1oM8Wj9IAzkq4yqzMSkfApgcc3aFeD0-Pxgww/exec';
+// POST endpoint (stable, without redirects) – used for writes
+const SCRIPT_URL_POST = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLju_ASouAiiG5mvUe2YGBZDHtV2dhsjhfJSKpfDMF_hv3tSrtHrruxIGWewkXZ7o-HEpo9eLQPMkOQIEhjf4k2KIKE5SwM7Dy2-9dSHZX9zcx4bcNskpRIX5QDlqt7YULxBGHMxad_TOx49_R6AgGVodCU_-Z3fDijyASqnmCScqHdL9afzKKAwN8CogzEFdEB-F81XY_YVmx9nPepwiYIWSzICJAwdpdTEnRc31pJnHlw8YNHpBlM-zwuP7KB5i6AgTq20fYdfNMAD5er3XMbfE7tuBYHKRCktbXo1&lib=MHLC092P6XK4oKRU9KMqxTCLVZkolgQ1O';
 
 // ===== META UPDATE BADGE (export + PiesneNaDnes + PlaylistOrder) =====
 const LS_META_SEEN = 'spevnik_meta_seen_v1';
@@ -292,29 +295,40 @@ function jsonpRequest(url){
   return new Promise((resolve, reject) => {
     const cb = "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     const s = document.createElement('script');
-    const JSONP_TIMEOUT_MS = 15000;
+    const JSONP_TIMEOUT_MS = 20000;
+    const KEEP_NOOP_MS = 5 * 60 * 1000; // keep noop 5 min to avoid "cb is not defined" late-arrivals
     let done = false;
+
+    function keepNoop(){
+      // If the request returns late (after timeout), the script will still call the callback.
+      // Keeping a noop here prevents console errors and broken future JSONP calls.
+      try { window[cb] = () => {}; } catch(e) {}
+      try { setTimeout(() => { try { delete window[cb]; } catch(e) {} }, KEEP_NOOP_MS); } catch(e) {}
+    }
+
     const timer = setTimeout(() => {
       if (done) return;
       done = true;
-      try { delete window[cb]; } catch(e) {}
-      try { s.remove(); } catch(e) {}
+      keepNoop();
+      cleanupScript();
       reject(new Error('jsonp timeout'));
     }, JSONP_TIMEOUT_MS);
+
     const sep = url.includes('?') ? '&' : '?';
-    const full = url + sep + "callback=" + cb + "&t=" + Date.now();
+    const full = url + sep + "callback=" + encodeURIComponent(cb) + "&t=" + Date.now();
 
     window[cb] = (data) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      cleanup();
+      cleanupScript();
+      // safe cleanup (leave noop for a bit)
+      keepNoop();
       resolve(data);
     };
 
-    function cleanup(){
-      try { delete window[cb]; } catch(e) { window[cb] = undefined; }
-      if (s && s.parentNode) s.parentNode.removeChild(s);
+    function cleanupScript(){
+      try { if (s && s.parentNode) s.parentNode.removeChild(s); } catch(e) {}
     }
 
     s.src = full;
@@ -323,22 +337,12 @@ function jsonpRequest(url){
       if (done) return;
       done = true;
       clearTimeout(timer);
-      cleanup();
-      reject(new Error("JSONP load failed"));
+      keepNoop();
+      cleanupScript();
+      reject(new Error('JSONP load failed'));
     };
     document.head.appendChild(s);
   });
-
-  // Periodic retry (some Android builds drop the wake lock)
-  try{
-    setInterval(() => {
-      try{ if (document.visibilityState === 'visible') activate(); }catch(e){}
-    }, 15000);
-  }catch(e){}
-
-  // Re-activate on window focus
-  try{ window.addEventListener('focus', () => { try{ activate(); }catch(e){} }, true); }catch(e){}
-
 }
 
 const OWNER_PWD = "wert";
@@ -347,6 +351,10 @@ const ADMIN_PWD = OWNER_PWD;
 const FORMSPREE_URL = "https://formspree.io/f/mvzzkwlw";
 
 let songs = [], filteredSongs = [];
+
+// ===== KEY HISTORY (História tóniny) =====
+const keyHistCache = {}; // songId -> { baseDate:'1.1.2026', baseKey:'C', rows:[{id,who,date,from,to}] }
+const keyHistOpen = {};  // songId -> bool
 
 // ===== SONG EDITOR (local-first) =====
 const LS_SONG_EDITS = 'spevnik_song_edits_v1'; // local overrides + local-only songs
@@ -477,13 +485,18 @@ function applyPermsToUI(){
   if (adPanel) adPanel.style.display = (logged && isOwner()) ? 'block' : 'none';
   if (adPanel && adPanel.style.display === 'block') adPanel.classList.add('collapsed');
 
-  // new song button only in list (D/E)
-  const newWrap = document.getElementById('song-new-btn-wrap');
-  if (newWrap) newWrap.style.display = (logged && (hasPerm('D') || hasPerm('E'))) ? 'block' : 'none';
+  // top actions row (Nová pieseň + owner tools)
+  const topActions = document.getElementById('top-actions');
+  if (topActions) topActions.style.display = (logged && (hasPerm('D') || hasPerm('E') || isOwner())) ? 'flex' : 'none';
 
-  // admin manage button near 'Nová pieseň' (owner only)
-  const admBtn = document.getElementById('admin-manage-btn');
-  if (admBtn) admBtn.style.display = (logged && isOwner()) ? '' : 'none';
+  const newBtn = document.getElementById('song-new-btn-list');
+  if (newBtn) newBtn.style.display = (logged && (hasPerm('D') || hasPerm('E') || isOwner())) ? '' : 'none';
+
+  const adminsBtn = document.getElementById('admins-open-btn');
+  if (adminsBtn) adminsBtn.style.display = (logged && isOwner()) ? '' : 'none';
+
+  const changesBtn = document.getElementById('changes-open-btn');
+  if (changesBtn) changesBtn.style.display = (logged && isOwner()) ? '' : 'none';
 
   // collapse on show
   if (dnesPanel && dnesPanel.style.display === 'block') dnesPanel.classList.add('collapsed');
@@ -852,6 +865,14 @@ function toggleEditor(panelId){
     ico.className = panel.classList.contains('collapsed')
       ? 'fas fa-chevron-down editor-toggle-ico'
       : 'fas fa-chevron-up editor-toggle-ico';
+  }
+
+  // lazy load
+  if (!panel.classList.contains('collapsed')){
+    try{
+      if (panelId === 'admins-editor-panel') adminRefresh();
+      if (panelId === 'changes-editor-panel') loadChangesList();
+    }catch(e){}
   }
 }
 
@@ -1648,6 +1669,7 @@ if (pendingLabel && pendingChordLines.length) {
   pendingChordLines.length = 0;
   closeSection();
 }
+
 closeSection();
 pendingLabel = '';
 pendingSpecial = '';
@@ -2404,7 +2426,8 @@ function renderSong() {
   // +1 / -2 (samostatný riadok) -> Transpozícia: +1
   text = text.replace(/^\s*([+-]\d+)\s*\n/, 'Transpozícia: $1\n');
   const el = document.getElementById('song-content');
-  el.innerHTML = songTextToHTML(text);
+  const sid = String((currentSong && (currentSong.originalId || currentSong.id)) || '').trim();
+  el.innerHTML = songTextToHTML(text) + renderKeyHistorySection(sid);
   el.style.fontSize = fontSize + 'px';
 
   // sync presentation overlay
@@ -3124,7 +3147,7 @@ async function saveDnesEditor() {
   loadDnesCacheFirst(true);
 
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=PiesneNaDnes&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL_POST}?action=save&name=PiesneNaDnes&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
     dnesDirty = false;
     showToast("Uložené ✅", true);
     setButtonStateById('dnes-save-btn', false);
@@ -3292,7 +3315,7 @@ async function saveDnesToHistory(){
   renderHistoryUI(true);
 
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL_POST}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' });
     showToast('Uložené do histórie ✅', true);
   } catch(e) {
     showToast('Nepodarilo sa uložiť do histórie ❌', false);
@@ -3309,7 +3332,7 @@ function deleteHistoryEntry(ts){
   const next = arr.filter(x => Number(x.ts) !== Number(ts));
   localStorage.setItem(LS_HISTORY, JSON.stringify(next));
   renderHistoryUI(true);
-  try { fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
+  try { fetch(`${SCRIPT_URL_POST}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(next))}`, { mode:'no-cors' }); } catch(e) {}
   loadHistoryFromDrive();
 }
 
@@ -3329,7 +3352,7 @@ function renameHistoryEntry(ts){
   renderHistoryUI(true);
   // sync to Drive (best effort)
   try {
-    fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
+    fetch(`${SCRIPT_URL_POST}?action=save&name=${encodeURIComponent(HISTORY_NAME)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(arr))}`, { mode:'no-cors' });
   } catch(e) {}
 }
 
@@ -3726,12 +3749,12 @@ const newName = rawName;
   newPlaylist();
 // persist to Drive
   try {
-    await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(newName)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
-    await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL_POST}?action=save&name=${encodeURIComponent(newName)}&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(payload)}`, { mode:'no-cors' });
+    await fetch(`${SCRIPT_URL_POST}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
     // best-effort delete old name on backend if renamed
     if (oldName && newName !== oldName) {
-      try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(oldName)}&pwd=${encodeURIComponent(getAuthPwd())}`, { mode:'no-cors' }); } catch(e) {}
-      try { await fetch(`${SCRIPT_URL}?action=save&name=${encodeURIComponent(oldName)}&pwd=${encodeURIComponent(getAuthPwd())}&content=`, { mode:'no-cors' }); } catch(e) {}
+      try { await fetch(`${SCRIPT_URL_POST}?action=delete&name=${encodeURIComponent(oldName)}&pwd=${encodeURIComponent(getAuthPwd())}`, { mode:'no-cors' }); } catch(e) {}
+      try { await fetch(`${SCRIPT_URL_POST}?action=save&name=${encodeURIComponent(oldName)}&pwd=${encodeURIComponent(getAuthPwd())}&content=`, { mode:'no-cors' }); } catch(e) {}
     }
     playlistDirty = false;
     showToast('Uložené ✅', true);
@@ -3789,8 +3812,8 @@ async function deletePlaylist(nameEnc){
   renderPlaylistsUI(true);
 
   try {
-    try { await fetch(`${SCRIPT_URL}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(getAuthPwd())}`, { mode:'no-cors' }); } catch(e) {}
-    await fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
+    try { await fetch(`${SCRIPT_URL_POST}?action=delete&name=${encodeURIComponent(name)}&pwd=${encodeURIComponent(getAuthPwd())}`, { mode:'no-cors' }); } catch(e) {}
+    await fetch(`${SCRIPT_URL_POST}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' });
     showToast('Vymazané ✅', true);
   } catch(e) {
     showToast('Nepodarilo sa vymazať ❌', false);
@@ -3829,7 +3852,7 @@ function applyReorder(ctx, from, to) {
     renderPlaylistsUI(true);
     // best-effort persist order
     if (isAdmin) {
-      try { fetch(`${SCRIPT_URL}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' }); } catch(e) {}
+      try { fetch(`${SCRIPT_URL_POST}?action=save&name=PlaylistOrder&pwd=${encodeURIComponent(getAuthPwd())}&content=${encodeURIComponent(JSON.stringify(playlistOrder))}`, { mode:'no-cors' }); } catch(e) {}
     }
   }
   else if (ctx === 'plsel') {
@@ -4323,7 +4346,7 @@ async function saveLitOverridesToDrive(){
     if (!SCRIPT_URL) return;
     const obj = getLitOverrides();
     obj.updatedAt = Date.now();
-    const url = `${SCRIPT_URL}?action=save&pwd=${encodeURIComponent(getAuthPwd())}&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}&content=${encodeURIComponent(JSON.stringify(obj))}`;
+    const url = `${SCRIPT_URL_POST}?action=save&pwd=${encodeURIComponent(getAuthPwd())}&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}&content=${encodeURIComponent(JSON.stringify(obj))}`;
     const res = await jsonpRequest(url);
     if (res && res.ok){
       __litOverrides = obj;
@@ -6672,7 +6695,7 @@ async function saveSongEditor(){
     body.set('payload', JSON.stringify(payload));
 
     // no-cors: we can't read response, but request will reach GAS
-    await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body });
+    await fetch(SCRIPT_URL_POST, { method:'POST', mode:'no-cors', body });
 
     // Refresh from server so EVERYONE sees it and we keep exact export structure
     const beforeMeta = getSeenMeta();
@@ -6712,7 +6735,7 @@ async function deleteSongEditor(){
     body.set('pwd', getAuthPwd());
     body.set('id', String(seEditingId));
 
-    await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body });
+    await fetch(SCRIPT_URL_POST, { method:'POST', mode:'no-cors', body });
     await runUpdateNow(true);
     showToast('Presunuté do koša', true, 1500);
     closeSongEditor(true);
@@ -7178,6 +7201,12 @@ function adminClearForm(){
   renderAdminsList();
 }
 
+function adminNew(){
+  // explicit "+ Nový" button for owner
+  adminClearForm();
+  try{ const pwd = document.getElementById('admin-pwd'); if (pwd) pwd.focus(); }catch(e){}
+}
+
 async function adminSave(){
   if (!isOwner()) return;
   const pwdEl = document.getElementById('admin-pwd');
@@ -7228,12 +7257,111 @@ async function adminDeleteSelected(){
   }
 }
 
-// Hook: refresh admins when panel is shown
-const _oldToggleEditor = window.toggleEditor;
-window.toggleEditor = function(id){
-  try{ _oldToggleEditor(id); }catch(e){}
-  if (id === 'admins-editor-panel' && isOwner()){
-    // refresh list when opening
-    setTimeout(()=>{ try{ adminRefresh(); }catch(e){} }, 50);
+// ===== OWNER: ZMENY (audit feed) =====
+let _changesCache = [];
+let _changesOpenId = null;
+
+async function loadChangesList(){
+  if (!isOwner()) return;
+  const box = document.getElementById('changes-list');
+  const det = document.getElementById('changes-detail');
+  if (det){ det.style.display='none'; det.innerHTML=''; }
+  if (box) box.innerHTML = '<div class="small-muted">Načítavam…</div>';
+  try{
+    const data = await jsonpRequest(`${SCRIPT_URL}?action=changesList&pwd=${encodeURIComponent(getAuthPwd())}`);
+    if (!data || !data.ok){
+      if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať zmeny.</div>';
+      return;
+    }
+    _changesCache = Array.isArray(data.list) ? data.list : [];
+    renderChangesList();
+  }catch(e){
+    if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať zmeny.</div>';
   }
-};
+}
+
+function renderChangesList(){
+  const box = document.getElementById('changes-list');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!_changesCache.length){
+    box.innerHTML = '<div class="small-muted">Zatiaľ žiadne zmeny.</div>';
+    return;
+  }
+  _changesCache.forEach(ch=>{
+    const row = document.createElement('div');
+    row.className = 'editor-item';
+    if (ch.unread) row.classList.add('unread-item');
+    const when = escapeHtml(String(ch.date||''));
+    const who = escapeHtml(String(ch.who||''));
+    const title = escapeHtml(String(ch.songTitle||''));
+    const type = escapeHtml(String(ch.type||''));
+    row.innerHTML = `<div style="display:flex; justify-content:space-between; gap:10px;">
+      <div style="flex:1; min-width:0;">
+        <div><b>${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(String(ch.songId||''))}</span></div>
+        <div class="small-muted">${type}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+      </div>
+      <div><button class="btn-neutral">Detail</button></div>
+    </div>`;
+    row.querySelector('button').onclick = ()=>openChangeDetail(String(ch.id||''));
+    box.appendChild(row);
+  });
+}
+
+function openChangeDetail(id){
+  _changesOpenId = String(id||'');
+  const ch = _changesCache.find(x=>String(x.id)===_changesOpenId);
+  const det = document.getElementById('changes-detail');
+  if (!det || !ch) return;
+  const title = escapeHtml(String(ch.songTitle||''));
+  const type = escapeHtml(String(ch.type||''));
+  const who = escapeHtml(String(ch.who||''));
+  const when = escapeHtml(String(ch.date||''));
+  const info = escapeHtml(String(ch.info||''));
+  det.style.display='block';
+  det.innerHTML = `
+    <div class="modal-hint" style="margin:0;">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+        <div style="flex:1;">
+          <div><b>${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(String(ch.songId||''))}</span></div>
+          <div class="small-muted">${type}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+        </div>
+        <button class="btn-danger" id="ch-close-btn">Zavrieť</button>
+      </div>
+      ${info ? `<div style="margin-top:8px; white-space:pre-wrap;">${info}</div>` : ''}
+      <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-primary" id="ch-open-song">Otvoriť pieseň</button>
+      </div>
+    </div>`;
+  det.querySelector('#ch-open-song').onclick = ()=>{
+    try{ openSongById(String(ch.songId||'')); }catch(e){}
+  };
+  det.querySelector('#ch-close-btn').onclick = ()=>closeChangeDetail();
+}
+
+async function closeChangeDetail(){
+  const det = document.getElementById('changes-detail');
+  if (det){ det.style.display='none'; det.innerHTML=''; }
+  const id = _changesOpenId;
+  _changesOpenId = null;
+  if (!id) return;
+  try{
+    await jsonpRequest(`${SCRIPT_URL}?action=changesSeen&pwd=${encodeURIComponent(getAuthPwd())}&id=${encodeURIComponent(id)}`);
+    // refresh local state
+    _changesCache = _changesCache.map(x=> (String(x.id)===id ? { ...x, unread:false } : x));
+    renderChangesList();
+  }catch(e){}
+}
+
+function openSongById(id){
+  const sid = String(id||'').replace(/^0+/,'');
+  if (!sid) return;
+  // prefer current filtered list
+  const s = songs.find(x=>String(x.originalId||'').replace(/^0+/,'')===sid) || songs.find(x=>String(x.id||'')===sid);
+  if (s){
+    currentListSource = 'all';
+    openSong(s);
+    return;
+  }
+  showToast('Pieseň sa nenašla v aktuálnych dátach.', false, 2000);
+}
