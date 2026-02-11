@@ -182,45 +182,111 @@ function startMetaPolling(){
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkMetaAndToggleBadge(); });
 }
 
+function _showSyncRetry(show){
+  const b = document.getElementById('statusSyncRetry');
+  if (!b) return;
+  b.style.display = show ? 'block' : 'none';
+}
+
+function _setSyncProgress(step, total, label){
+  const t = total || 4;
+  const s = Math.max(1, Math.min(t, step||1));
+  setSyncStatus(`Aktualizujem… (${s}/${t}) ${label||''}`.trim(), 'warn', 0);
+}
+
+let __syncInFlight = false;
+let __lastSyncWasAuto = false;
+
+function _setDangerActionsEnabled(enabled){
+  // Disable only actions that could race with incoming data.
+  const ids = ['song-new-btn-list','song-editor-save-btn','song-editor-delete-btn'];
+  for (const id of ids){
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.disabled = !enabled;
+    el.classList.toggle('disabled', !enabled);
+    // keep visibility as-is; only disable interaction
+  }
+}
+
 async function runUpdateNow(fromAuto=false){
+  if (__syncInFlight) return;
+  __syncInFlight = true;
+  __lastSyncWasAuto = !!fromAuto;
+  _showSyncRetry(false);
+
   if (!navigator.onLine){
     setSyncStatus("Offline", "warn", 0);
+    __syncInFlight = false;
     return;
   }
+
   // zavri FAB menu (ak je otvorené) – len ak to spúšťa používateľ
   if (!fromAuto) { try { closeFabMenu(); } catch(e) {} }
   setUpdateBadgeVisible(false);
 
-  setSyncStatus("Aktualizujem…", "warn", 0);
+  // During sync, prevent risky actions (save/delete/new song). Keep UI usable otherwise.
+  _setDangerActionsEnabled(false);
 
+  try{
+    // 1/4: export
+    _setSyncProgress(1,4,'Export');
+    try { lastRemoteMeta = await fetchRemoteMeta(); } catch(e) {}
+    await parseXML();
 
-  // fetch meta (aby sme po update vedeli badge schovať)
-  try { lastRemoteMeta = await fetchRemoteMeta(); } catch(e) {}
+    // 2/4: piesne na dnes
+    _setSyncProgress(2,4,'Piesne na dnes');
+    await loadDnesFromDrive();
 
-  // stiahni a ulož nové dáta
-  try { await parseXML(); } catch(e) {}
-  try { await Promise.allSettled([loadDnesFromDrive(), loadPlaylistsFromDrive(), loadHistoryFromDrive()]); } catch(e) {}
+    // 3/4: playlisty
+    _setSyncProgress(3,4,'Playlisty');
+    await loadPlaylistsFromDrive();
 
-  // po update si zober najnovšiu meta (ak sa medzitým niečo zmenilo)
-  try { lastRemoteMeta = await fetchRemoteMeta(); } catch(e) {}
-  if (lastRemoteMeta) setSeenMeta(lastRemoteMeta);
+    // 4/4: história + zmeny + liturgia
+    _setSyncProgress(4,4,'História');
+    await Promise.allSettled([
+      loadHistoryFromDrive(),
+      (async()=>{ try{ if (typeof refreshLitOverridesFromDrive === 'function') await refreshLitOverridesFromDrive(); }catch(e){} })(),
+      (async()=>{ try{ if (isOwner()) await loadChangesList(); }catch(e){} })()
+    ]);
 
-  setSyncStatus("Aktualizované", "ok", 2000);
+    try { lastRemoteMeta = await fetchRemoteMeta(); } catch(e) {}
+    if (lastRemoteMeta) setSeenMeta(lastRemoteMeta);
 
-  // najstabilnejšie: tvrdý reload UI
-  try{ renderAllSongs(); }catch(e){}
-  try{ renderDnesUI(); }catch(e){}
-  try{ refreshOpenDnesSongOrderIfNeeded(); }catch(e){}
-  try{ renderPlaylistsUI(true); }catch(e){}
-  try{ loadHistoryCacheFirst(true); }catch(e){}
+    setSyncStatus("Aktualizované", "ok", 2000);
+    showToast("Aktualizované", true, 2000);
+  }catch(err){
+    console.error('runUpdateNow failed', err);
+    setSyncStatus("Chyba synchronizácie", "err", 0);
+    _showSyncRetry(true);
+    showToast("Chyba synchronizácie", false, 2500);
+  }finally{
+    _setDangerActionsEnabled(true);
+    __syncInFlight = false;
+  }
+}
 
-  showToast("Aktualizované", true, 2000);
+// manual sync wrapper (keeps UI stable, no hard reset)
+async function syncDataManual(closeDiag=false){
+  if (closeDiag) { try{ closeDiagnostics(); }catch(e){} }
+  return runUpdateNow(false);
+}
+
+function syncRetryNow(){
+  _showSyncRetry(false);
+  return runUpdateNow(__lastSyncWasAuto);
 }
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v110';
-const APP_CACHE_NAME = 'spevnik-v110';
+const APP_BUILD = 'v111';
+const APP_CACHE_NAME = 'spevnik-v111';
+
+function _buildNum(){
+  // APP_BUILD is like "v111"
+  const m = String(APP_BUILD||'').match(/(\d+)/);
+  return m ? m[1] : '0';
+}
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -4152,26 +4218,24 @@ async function hardResetApp() {
 
   try { closeFabMenu(); } catch(e) {}
 
-  // hneď plochu + zbalenie + vyčistenie vyhľadávania
-  try { goHomeUI(true); } catch(e) {}
+  // lock UI + hláška pre hard reset
+  _lockAppUpdateOverlay("Tvrdý reset…");
 
-  // lock UI + hláška pre app update
-  _lockAppUpdateOverlay("Aktualizujem aplikáciu…");
-
-  // paralelne spusti aj sync dát (aby si videl obe hlášky)
-  try { setSyncStatus("Aktualizujem…", "warn", 0); } catch(e) {}
+  // 1) najprv synchronizuj dáta (ak sa dá) – nech máš čerstvé podklady
+  try { _setSyncProgress(1,2,'Synchronizujem'); } catch(e) {}
   try { await runUpdateNow(true); } catch(e) {}
 
-  // vymaž cache + localStorage a urob tvrdý reload
+  // 2) vymaž cache + localStorage
+  try { _setSyncProgress(2,2,'Resetujem cache'); } catch(e) {}
   try{ localStorage.clear(); }catch(e){}
   try{
     const keys = await caches.keys();
     for (const k of keys) await caches.delete(k);
   } catch (e) {}
 
-  // ukončenie app update hlášky (na 2s)
-  try { document.getElementById('appUpdateText').textContent = "Aplikácia aktualizovaná"; } catch(e) {}
-  await new Promise(r=>setTimeout(r, 2000));
+  // krátka hláška
+  try { document.getElementById('appUpdateText').textContent = "Reštartujem aplikáciu…"; } catch(e) {}
+  await new Promise(r=>setTimeout(r, 700));
 
   _unlockAppUpdateOverlay();
 
@@ -4179,7 +4243,7 @@ async function hardResetApp() {
   try{
     const base = location.href.split('#')[0].split('?')[0];
     const hash = location.hash || '';
-    location.replace(base + '?v=96&ts=' + Date.now() + hash);
+    location.replace(base + '?v=' + _buildNum() + '&ts=' + Date.now() + hash);
   }catch(e){
     try{ location.reload(); }catch(e2){}
   }
@@ -6816,6 +6880,10 @@ function toggleSongVersionDiff(idx){
 }
 
 function openSongEditorNew(){
+  if (__syncInFlight){
+    showToast('Počas synchronizácie počkaj chvíľu…', false, 2200);
+    return;
+  }
   if (!(hasPerm('D') || hasPerm('E'))) return;
   seIsNew = true;
   seEditingId = _ensureRandomId();
@@ -6935,6 +7003,10 @@ function closeSongEditor(forceDiscard){
 }
 
 async function saveSongEditor(){
+  if (__syncInFlight){
+    showToast('Počas synchronizácie nie je možné ukladať. Skús znova o chvíľu.', false, 2600);
+    return;
+  }
   if (!(hasPerm('D') || hasPerm('E'))) return;
 
   const num = document.getElementById('se-number');
@@ -7031,6 +7103,10 @@ async function saveSongEditor(){
 }
 
 async function deleteSongEditor(){
+  if (__syncInFlight){
+    showToast('Počas synchronizácie nie je možné mazať. Skús znova o chvíľu.', false, 2600);
+    return;
+  }
   if (!isOwner()) return;
   if (!seEditingId) return;
   if (!confirm('Naozaj natrvalo vymazať túto pieseň?')) return;

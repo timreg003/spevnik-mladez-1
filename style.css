@@ -624,6 +624,15 @@ body.present #presentControls{ display:flex; }
 .modal-save.disabled{
   background:#777;
   color:#111;
+  opacity:0.75;
+  pointer-events:none;
+}
+
+/* During background sync, temporarily disable risky actions */
+.btn-neutral.disabled,
+.btn-delete.disabled{
+  opacity:0.55;
+  pointer-events:none;
 }
 .modal-body{
   padding:14px 12px 20px;
@@ -1278,9 +1287,9 @@ body.present #presentControls{ display:flex; }
 /* ===== v96 status panel (2 riadky) ===== */
 .status-panel{
   /* Offline/online + sync stav: vpravo dole, nech nezavadzia */
-  position: fixed; right: 14px; bottom: 14px; left: auto; transform: none;
+  position: fixed; right: 14px; bottom: 40px; left: auto; transform: none;
   display: flex; flex-direction: column; gap: 6px;
-  z-index: 999999; max-width: 92vw; pointer-events: none;
+  z-index: 1000002; max-width: 92vw; pointer-events: none;
 }
 .status-line{
   display:none;
@@ -1289,6 +1298,20 @@ body.present #presentControls{ display:flex; }
   box-shadow: 0 8px 30px rgba(0,0,0,0.55);
   text-align: center; pointer-events: none;
 }
+
+.status-action{
+  align-self: flex-end;
+  display: none;
+  pointer-events: auto;
+  background: #111;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 900;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.55);
+}
+.status-action:active{ transform: translateY(1px); }
 .status-line.ok{ border-color:#00c853; }
 .status-line.warn{ border-color:#ffbb33; }
 .status-line.err{ border-color:#ff4444; }

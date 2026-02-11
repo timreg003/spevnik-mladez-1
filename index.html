@@ -5,22 +5,23 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <title>Mládežnícky spevník NIŽNÁ</title>
-<link href="manifest.json?v=110" rel="manifest"/>
+<link href="manifest.json?v=111" rel="manifest"/>
 <meta content="#00bfff" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="Spevník" name="apple-mobile-web-app-title"/>
-<link href="icon.png?v=110" rel="apple-touch-icon"/>
-<link href="icon.png?v=110" rel="icon" type="image/png"/>
+<link href="icon.png?v=111" rel="apple-touch-icon"/>
+<link href="icon.png?v=111" rel="icon" type="image/png"/>
 <link crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
-<link href="style.css?v=110" rel="stylesheet"/>
+<link href="style.css?v=111" rel="stylesheet"/>
 </head>
 <body>
 <div class="toast" id="toast" style="display:none;"></div>
 <div class="status-panel" id="statusPanel" style="display:none;">
   <div class="status-line" id="statusSave"></div>
   <div class="status-line" id="statusSync"></div>
+  <button class="status-action" id="statusSyncRetry" onclick="syncRetryNow()" style="display:none;" type="button">Skúsiť znova</button>
 </div>
 <div class="app-update-overlay" id="appUpdateOverlay" style="display:none;" aria-hidden="true">
   <div class="app-update-box">
@@ -301,7 +302,7 @@
 <i class="fas fa-arrows-rotate"></i>
 </button>
 <div aria-hidden="true" class="fab-menu" id="fab-menu">
-<button id="fab-update-btn" onclick="hardResetApp()">Aktualizovať aplikáciu</button>
+<button id="fab-update-btn" onclick="syncDataManual()">Synchronizovať dáta</button>
 <button id="fab-diag-btn" onclick="openDiagnostics()">Diagnostika</button>
 </div>
 </div>
@@ -313,7 +314,7 @@
 <span class="psSpeed" id="psSpeed">Rýchlosť: 1</span>
 <button aria-label="Ukončiť" id="psExit" onclick="exitPresentationMode()"><i class="fas fa-xmark"></i></button>
 </div>
-<script src="script.js?v=110"></script>
+<script src="script.js?v=111"></script>
 <!-- FORM EDITOR MODAL -->
 <div class="modal-overlay" id="form-modal" style="display:none;">
 <div aria-labelledby="form-modal-title" aria-modal="true" class="modal-sheet" role="dialog">
@@ -360,7 +361,7 @@
 <div class="modal-header">
 <button class="modal-close" onclick="closeSongEditor(false)"><i class="fas fa-times"></i></button>
 <div class="modal-title" id="song-editor-title">Editor piesne</div>
-<button class="modal-save" onclick="saveSongEditor()">Uložiť</button>
+<button class="modal-save" id="song-editor-save-btn" onclick="saveSongEditor()">Uložiť</button>
 </div>
 <div class="modal-body">
 <div class="modal-block">
@@ -458,7 +459,7 @@ Tip: Najprv vyber „Základ“, potom „Typ“ (napr. D + m → <b>[Dm]</b>).<
     </div>
 
     <div class="btn-row-2" style="margin-top:8px;">
-      <button class="btn-delete" onclick="deleteSongEditor()" type="button">Vymazať túto pieseň</button>
+      <button class="btn-delete" id="song-editor-delete-btn" onclick="deleteSongEditor()" type="button">Vymazať túto pieseň</button>
       <button class="btn-neutral" onclick="toggleBackupMore(false)" type="button">Zavrieť</button>
     </div>
 
@@ -482,6 +483,19 @@ Tip: Najprv vyber „Základ“, potom „Typ“ (napr. D + m → <b>[Dm]</b>).<
 <div class="modal-label">Stav</div>
 <div class="diag-summary" id="diag-summary"></div>
 </div>
+
+<div class="modal-block">
+  <div class="modal-label">Údržba</div>
+  <div class="modal-hint">Synchronizovať dáta: stiahne najnovšie dáta (piesne, piesne na dnes, playlisty, liturgia, zmeny) bez mazania cache. Nepreruší prácu, len potichu aktualizuje obsah.</div>
+  <div class="form-buttons" style="margin-top:10px; justify-content:flex-end; gap:10px;">
+    <button class="btn-neutral" onclick="syncDataManual(true)" type="button"><i class="fas fa-arrows-rotate"></i> Synchronizovať dáta</button>
+  </div>
+  <div class="modal-hint" style="margin-top:12px;">Tvrdý reset: použi, keď aplikácia nejde, seká, zobrazuje starú verziu, padá alebo sa správa divne. Vymaže cache/uložené dáta aplikácie a načíta ju nanovo.</div>
+  <div class="form-buttons" style="margin-top:10px; justify-content:flex-end; gap:10px;">
+    <button class="btn-delete" onclick="hardResetApp()" type="button"><i class="fas fa-triangle-exclamation"></i> Tvrdý reset</button>
+  </div>
+</div>
+
 <div class="modal-block">
 <div class="modal-label">Detaily</div>
 <textarea class="diag-text" id="diag-text" readonly=""></textarea>
