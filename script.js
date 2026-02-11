@@ -92,10 +92,28 @@ async function updateSeenMetaFromServer(){
 // CORS-free SAVE using JSONP (so we can reliably detect unauthorized/errors).
 // Use for small payloads (dnes, playlists, history, ...). For large payloads (full XML) we use POST.
 async function jsonpSave(params){
-  const res = await jsonpRequest(addParams(SCRIPT_URL, params));
-  if (res && res.ok) return res;
-  const err = (res && res.error) ? String(res.error) : 'save_failed';
-  throw new Error(err);
+  // One retry on transient JSONP issues (timeout/load_failed) – GAS often succeeds but the callback may arrive late.
+  const url = addParams(SCRIPT_URL, params);
+  let lastErr = null;
+
+  for (let attempt=0; attempt<2; attempt++){
+    try{
+      const res = await jsonpRequest(url);
+      if (res && res.ok) return res;
+      const err = (res && res.error) ? String(res.error) : 'save_failed';
+      throw new Error(err);
+    }catch(e){
+      const msg = String((e && e.message) ? e.message : e||'');
+      lastErr = e;
+      if (attempt === 0 && (msg.includes('timeout') || msg.includes('load_failed'))){
+        // small backoff then retry
+        await new Promise(r=>setTimeout(r, 600));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr || new Error('save_failed');
 }
 // ===== GAS SAVE helpers (reliable error reporting) =====
 async function gasSaveFile(name, content){
@@ -201,8 +219,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v109';
-const APP_CACHE_NAME = 'spevnik-v109';
+const APP_BUILD = 'v110';
+const APP_CACHE_NAME = 'spevnik-v110';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -348,7 +366,7 @@ function jsonpRequest(url){
 
     const cb = "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     const s = document.createElement('script');
-    const JSONP_TIMEOUT_MS = 20000;
+    const JSONP_TIMEOUT_MS = 45000;
     const KEEP_NOOP_MS = 5 * 60 * 1000; // keep noop 5 min to avoid "cb is not defined" late-arrivals
     let done = false;
 
@@ -4430,8 +4448,8 @@ const LIT_MASS_CHOICE_PREFIX = 'liturgia_mass_choice_'; // liturgia_mass_choice_
 
 // Admin override (999 Aleluja): prepísanie žalmu / refrénu / aklamácie pred evanjeliom.
 // Ukladá sa do Drive (folder "Playlisty") ako jeden JSON súbor, aby to videli všetci.
-const LIT_OVERRIDES_FILE = '_LiturgiaOverrides';
-const LIT_OVERRIDES_FILE_FALLBACK = 'LiturgiaOverrides';
+const LIT_OVERRIDES_FILE = 'LiturgiaOverrides.json';
+const LIT_OVERRIDES_FILE_FALLBACK = '_LiturgiaOverrides';
 const LIT_OVERRIDES_CACHE_KEY = 'liturgia_overrides_cache_v1';
 let __litOverrides = null; // {overrides:{key:{psalmRefrain,psalmText,verse}}}
 
@@ -4501,6 +4519,9 @@ async function _fetchLitOverridesFromDrive(){
     let res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}`);
     if (!res || !res.ok){
       res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent(LIT_OVERRIDES_FILE_FALLBACK)}`);
+    }
+    if (!res || !res.ok){
+      res = await jsonpRequest(`${SCRIPT_URL}?action=get&name=${encodeURIComponent('LiturgiaOverrides')}`);
     }
     if (!res || !res.ok) return null;
     const text = (res.text != null) ? String(res.text) : '';
@@ -6164,14 +6185,14 @@ function injectPsalmAndAlleluiaBlocks(alelujaText, iso){
   }
 
   // --- Žalm (refrén + telo) ---
-  const psalmFromVar = (v && v.psalmText) ? String(v.psalmText) : '';
+  const psalmFromVar = (v && (v.psalmText != null)) ? String(v.psalmText) : '';
   const psalmFromParsed = ((parsed && parsed.psalm) ? (parsed.psalm||[]).join('\n') : '');
   const psalmClean = cleanPsalmText(String(psalmFromVar || psalmFromParsed || ''));
   const psalmCleanTrim = String(psalmClean||'').replace(/\r/g,'').trim();
 
   // refrén môže byť v hlavičke (parsed.psalmRefrain) alebo v texte
   let refrainLine = '';
-  try { refrainLine = String((v && v.psalmRefrain) ? v.psalmRefrain : (parsed && parsed.psalmRefrain) || '').trim(); } catch(e) {}
+  try { refrainLine = String((v && (v.psalmRefrain != null)) ? v.psalmRefrain : ((parsed && parsed.psalmRefrain) || '')).trim(); } catch(e) {}
   // KBS niekedy uvádza refrén ako „... alebo Aleluja.“ – chceme len prvú časť.
   if (refrainLine && /\balebo\b/i.test(refrainLine)){
     refrainLine = refrainLine.split(/\balebo\b/i)[0].trim();
@@ -6371,7 +6392,7 @@ function setupAlelujaLitControlsIfNeeded(){
     })();
 
     // default žalm
-    const psalmFromVar = (v && v.psalmText) ? String(v.psalmText) : '';
+    const psalmFromVar = (v && (v.psalmText != null)) ? String(v.psalmText) : '';
     const psalmFromParsed = ((parsed && parsed.psalm) ? (parsed.psalm||[]).join('\n') : '');
     const psalmClean = cleanPsalmText(psalmFromVar || psalmFromParsed || '');
 
@@ -7001,13 +7022,9 @@ async function saveSongEditor(){
       }
     }catch(e){}
 
-    if (beforeMeta && afterMeta && Number(afterMeta.export||0) === Number(beforeMeta.export||0)){
-      setSaveStatus('Pozor: zmena sa možno neuložila na server (export sa nezmenil).', 'err', 3200);
-    } else {
-      setSaveStatus('Uložené', 'ok', 2000);
-    }
+    setSaveStatus('Uložené', 'ok', 2000);
   }catch(e){
-    setSaveStatus('Uloženie zlyhalo.', 'err', 2400);
+    setSaveStatus('Uloženie zlyhalo (skontroluj heslo / pripojenie).', 'err', 2600);
   }
 
   closeSongEditor(true);
@@ -7872,21 +7889,28 @@ function renderKeyHistorySection(songId, origKey){
   const raw = (cached && Array.isArray(cached.list)) ? cached.list : [];
 
   // baseline row:
-  // - if first record has empty "from", it is the creation / first detected key -> use its timestamp (new songs)
-  // - otherwise show 1.1.2026 + "Pôvodná tónina: X" derived from first chord (existing songs without history)
+  // - explicit base record (base:true) -> use its timestamp (new songs) and hide it from the change list
+  // - existing songs: default baseline is 1.1.2026 + original key (from first chord) IF the song originally had chords
+  // - special case: song had NO chords originally and chords were added later -> baseline stays empty; show change as "- → X"
   let baseTs = 0;
   let baseWho = "—";
   let baseKey = String(origKey||"");
   let list = raw;
 
-  if (raw.length && !String(raw[0].from||"").trim()){
-    baseTs = Number(raw[0].ts||0) || 0;
-    baseWho = String(raw[0].who||"—");
-    baseKey = String(raw[0].to||"");
+  const first = raw.length ? raw[0] : null;
+
+  if (first && first.base){
+    baseTs = Number(first.ts||0) || 0;
+    baseWho = String(first.who||"—");
+    baseKey = String(first.to||"");
     list = raw.slice(1);
-  } else if (raw.length && String(raw[0].from||"").trim()){
+  } else if (first && !String(first.from||"").trim() && String(first.to||"").trim()){
+    // chords were added later on an existing song -> do NOT claim an original key
+    baseKey = "";
+    list = raw;
+  } else if (first && String(first.from||"").trim()){
     // existing song: best-known original key is the "from" of the first recorded change
-    baseKey = String(raw[0].from||"");
+    baseKey = String(first.from||"");
   }
 
   const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
@@ -7898,7 +7922,7 @@ function renderKeyHistorySection(songId, origKey){
     const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
     const fromK = String(r.from||"");
     const toK = String(r.to||"");
-    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
+    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `- → ${escapeHtml(toK)}` : '');
     const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
     return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
   }).join('');
@@ -7982,7 +8006,7 @@ async function keyHistoryRefresh(songId){
           const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
           const fromK = String(r.from||"");
           const toK = String(r.to||"");
-          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
+          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `- → ${escapeHtml(toK)}` : '');
           const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
           return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
         }).join('');

@@ -867,20 +867,38 @@ function _firstChordRoot_(txt){
 function _maybeAppendKeyHistory_(songId, oldKey, newKey, who, existed){
   newKey = String(newKey||"");
   oldKey = String(oldKey||"");
-  if (!newKey) return;
-
-  // B: always check on save and write only if changed or new
-  const should = (!existed) || (oldKey !== newKey);
-  if (!should) return;
 
   const folder = _getOrCreateFolder_();
   const db = _readJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE) || { keys:{} };
   if (!db.keys) db.keys = {};
   if (!db.keys[songId]) db.keys[songId] = [];
+  const arr = db.keys[songId];
 
-  db.keys[songId].push({ ts: Date.now(), who, from: existed ? oldKey : "", to: newKey });
+  // New song (created in app): always create a baseline record with creation timestamp.
+  // - if it has chords -> baseline "to" is the initial key
+  // - if it has no chords -> baseline "to" is empty (UI shows only date)
+  if (!existed){
+    if (!arr.length || !arr[0] || !arr[0].base){
+      // keep baseline as the first element
+      arr.unshift({ ts: Date.now(), who, base:true, to: newKey });
+    } else {
+      // if baseline exists but had no key yet, fill it when chords appear
+      if (!String(arr[0].to||"") && newKey){
+        arr[0].to = newKey;
+      }
+    }
+    _writeJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE, db);
+    return;
+  }
+
+  // Existing song: only append changes when we can detect a key
+  if (!newKey) return;
+  if (oldKey === newKey) return;
+
+  arr.push({ ts: Date.now(), who, from: oldKey, to: newKey });
   _writeJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE, db);
 }
+
 
 function _appendChanges_(songId, num, title, who, ctx){
   const existed = !!ctx.existed;
