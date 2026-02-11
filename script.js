@@ -118,7 +118,7 @@ async function checkMetaAndToggleBadge(){
 
   // If we just came back online, clear the offline label
   const st = document.getElementById('syncStatus');
-  if (st && st.textContent === "Offline") setSyncStatus("", null);
+  if (st && st.textContent === "Offline") setSyncStatus("Online", "ok", 2000);
 
   try {
     const remote = await fetchRemoteMeta();
@@ -196,8 +196,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v103';
-const APP_CACHE_NAME = 'spevnik-v103';
+const APP_BUILD = 'v104';
+const APP_CACHE_NAME = 'spevnik-v104';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -4295,6 +4295,17 @@ window.addEventListener('pageshow', () => {
   try { setTimeout(()=>{ try{ forceInitialCollapsed(); } catch(e){} }, 0); } catch(e) {}
 });
 document.addEventListener('DOMContentLoaded', () => {
+  // online/offline indicator
+  try {
+    window.addEventListener('offline', () => {
+      setSyncStatus('Offline', 'warn', 0);
+    });
+    window.addEventListener('online', () => {
+      setSyncStatus('Online', 'ok', 2000);
+    });
+    if (!navigator.onLine) setSyncStatus('Offline', 'warn', 0);
+  } catch(e) {}
+
   // restore session (clears automatically when tab is closed)
   try { const s = loadAdminSession(); if (s) { adminSession = s; applyPermsToUI(); } } catch(e) {}
 

@@ -1249,9 +1249,17 @@ body.present #presentControls{ display:flex; }
 
 /* ===== v96 status panel (2 riadky) ===== */
 .status-panel{
-  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%);
-  display: flex; flex-direction: column; gap: 6px;
-  z-index: 999999; max-width: 92vw; pointer-events: none;
+  position: fixed;
+  right: 12px;
+  bottom: 40px;
+  left: auto;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 999999;
+  max-width: 70vw;
+  pointer-events: none;
 }
 .status-line{
   display:none;
