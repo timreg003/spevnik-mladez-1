@@ -106,19 +106,24 @@ async function gasDeleteFile(name){
 }
 
 
+let __wasOfflineFlag = !navigator.onLine;
+
 async function checkMetaAndToggleBadge(){
   // Badge check runs every minute. Keep bottom status clean:
   // - show "Offline" when offline
   // - do NOT spam "Aktualizované" every minute
   if (!navigator.onLine){
+    __wasOfflineFlag = true;
     setUpdateBadgeVisible(false);
     setSyncStatus("Offline", "warn", 0);
     return;
   }
 
-  // If we just came back online, clear the offline label
-  const st = document.getElementById('syncStatus');
-  if (st && st.textContent === "Offline") setSyncStatus("", null);
+  // If we just came back online, show "Online" briefly and clear it
+  if (__wasOfflineFlag){
+    __wasOfflineFlag = false;
+    setSyncStatus("Online", "ok", 2000);
+  }
 
   try {
     const remote = await fetchRemoteMeta();
@@ -196,8 +201,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v106';
-const APP_CACHE_NAME = 'spevnik-v106';
+const APP_BUILD = 'v108';
+const APP_CACHE_NAME = 'spevnik-v108';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -6507,6 +6512,7 @@ let seIsNew = false;
 // chord builder state
 let chordRoot = '';
 let chordQual = '';
+// Basové akordy (slash bass) nechávame podporované v texte, ale UI builder ich nepoužíva.
 let chordBass = '';
 
 function updateSongAdminActions(){
@@ -6868,10 +6874,21 @@ if (on){
 }
   document.body.classList.toggle('modal-open', !!on);
 
-  // E = text+chords editor, D = text-only (chords locked)
+  // E = text+chords editor, D = text-only (akordy zamknuté), owner = všetko
   try{
     const kbd = m.querySelector('.chord-kbd');
-    if (kbd) kbd.style.display = (hasPerm('E')) ? 'block' : 'none';
+    if (kbd){
+      const canSee = (isOwner() || hasPerm('E') || hasPerm('D'));
+      const dOnly = (!isOwner() && hasPerm('D') && !hasPerm('E'));
+      kbd.style.display = canSee ? 'block' : 'none';
+      // V D režime nechaj len „Rýchle šablóny“ + transpozíciu. Schovaj chord builder a hranaté zátvorky.
+      kbd.querySelectorAll('.chord-row:not(#editor-transpose-row), .chord-preview').forEach(el=>{
+        el.style.display = dOnly ? 'none' : '';
+      });
+      kbd.querySelectorAll('.form-buttons:not(.template-kbd)').forEach(el=>{
+        el.style.display = dOnly ? 'none' : '';
+      });
+    }
   }catch(e){}
 
   const t = document.getElementById('song-editor-title');
@@ -7186,6 +7203,25 @@ function initSongEditor(){
         }
       });
 
+      function moveCaretOutsideBrackets(){
+        if (!__dChordLockEnabled) return;
+        if (__dChordLockBypass) return;
+        try{
+          const pos = ta.selectionStart ?? 0;
+          const val = String(ta.value||'');
+          const open = val.lastIndexOf('[', pos);
+          const close = val.indexOf(']', pos);
+          if (open !== -1 && close !== -1 && open < pos && pos <= close){
+            const np = close + 1;
+            ta.selectionStart = ta.selectionEnd = np;
+          }
+        }catch(e){}
+      }
+
+      // Ak admin D klikne do [akordu], presuň kurzor hneď za zatvorku (nie na koniec textu)
+      ta.addEventListener('mouseup', ()=> setTimeout(moveCaretOutsideBrackets, 0));
+      ta.addEventListener('keyup', ()=> setTimeout(moveCaretOutsideBrackets, 0));
+
       ta.addEventListener('input', ()=>{
         try{
           if (!__dChordLockEnabled) return;
@@ -7208,6 +7244,7 @@ function initSongEditor(){
           // update baseline if chords unchanged
           __dChordLockChordsSig = sig;
           __dChordLockLastGood = cur;
+        moveCaretOutsideBrackets();
         }catch(e){}
       });
     }
@@ -7215,7 +7252,7 @@ function initSongEditor(){
 
   const roots = ['C','C#','D','D#','E','F','F#','G','G#','A','B','H'];
   const quals = ['', 'm', '7', 'm7', 'maj7', 'sus4', 'sus2', 'add9', '6', '9', 'dim', 'aug'];
-  const bass = ['', '/C','/C#','/D','/D#','/E','/F','/F#','/G','/G#','/A','/B','/H'];
+  // Basové akordy (UI) sú odstránené.
 
   function mkBtn(label, onClick){
     const b = document.createElement('button');
@@ -7228,7 +7265,7 @@ function initSongEditor(){
 
   const rWrap = document.getElementById('chord-roots');
   const qWrap = document.getElementById('chord-quals');
-  const bWrap = document.getElementById('chord-bass');
+  const bWrap = null;
 
   if (rWrap && !rWrap.dataset.inited){
     rWrap.dataset.inited = '1';
@@ -7243,13 +7280,7 @@ function initSongEditor(){
       qWrap.appendChild(mkBtn(lab, ()=>{ chordQual = q; highlightChordButtons(); updateChordPreview(); }));
     });
   }
-  if (bWrap && !bWrap.dataset.inited){
-    bWrap.dataset.inited = '1';
-    bass.forEach(bb=>{
-      const lab = bb==='' ? '—' : bb;
-      bWrap.appendChild(mkBtn(lab, ()=>{ chordBass = bb; highlightChordButtons(); updateChordPreview(); }));
-    });
-  }
+  // Bas (UI) odstránený
 
   refreshBackupFileState();
   // update actions visibility as detail opens
@@ -7258,6 +7289,7 @@ function initSongEditor(){
 
 function buildChord(){
   if (!chordRoot) return '';
+  // chordBass ostáva len pre kompatibilitu (ak je vložené ručne v texte)
   return chordRoot + (chordQual||'') + (chordBass||'');
 }
 function updateChordPreview(){
@@ -7287,12 +7319,7 @@ function highlightChordButtons(){
     const val = (lab === 'dur') ? '' : lab;
     if (val === chordQual) b.classList.add('active');
   });
-  // bass
-  document.querySelectorAll('#chord-bass .chord-btn').forEach(b=>{
-    const lab = b.textContent;
-    const val = (lab === '—') ? '' : lab;
-    if (val === chordBass) b.classList.add('active');
-  });
+  // bas UI odstránený
 }
 
 function insertBuiltChord(){
@@ -7307,6 +7334,19 @@ function insertBuiltChord(){
 function insertTextAtCaret(txt, focus){
   const ta = document.getElementById('se-text');
   if (!ta) return;
+  // Rýchle šablóny: vždy vlož na nový riadok pred aj za.
+  // (platí pre owner + D + E; volá sa z HTML tlačidiel)
+  try{
+    const raw = String(txt||'');
+    const cleaned = raw.replace(/\r/g,'');
+    const t = cleaned.trimEnd();
+    const isTpl = /^(R2?:|B2?:|\d{1,2}\.|Predohra:|Medzihra:|Dohra:|Poznámka:|Transpozícia:)\s*$/i.test(t.trim());
+    if (isTpl){
+      const label = t.trim().replace(/\s+$/,'');
+      // ensure exactly one blank line before and one newline after
+      txt = `\n${label}\n`;
+    }
+  }catch(e){}
   try{
     const start = ta.selectionStart ?? ta.value.length;
     const end = ta.selectionEnd ?? ta.value.length;
@@ -7669,7 +7709,7 @@ function renderChangesList(){
 
     row.innerHTML = `<div style="display:flex; justify-content:space-between; gap:10px;">
       <div style="flex:1; min-width:0;">
-        <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
+        <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b></div>
         <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
       </div>
       <div><button class="btn-neutral">Detail</button></div>
@@ -7696,7 +7736,7 @@ function openChangeDetail(id){
   if (ch.titleFrom && ch.titleFrom !== ch.titleTo) parts.push(`Názov: ${escapeHtml(ch.titleFrom)} → ${escapeHtml(ch.titleTo)}`);
   if (ch.numberFrom && ch.numberFrom !== ch.numberTo) parts.push(`Číslo: ${escapeHtml(ch.numberFrom)} → ${escapeHtml(ch.numberTo)}`);
   if (ch.keyTo && ch.keyFrom !== ch.keyTo){
-    parts.push(`Tonina: ${escapeHtml(ch.keyFrom||'—')} → ${escapeHtml(ch.keyTo)}`);
+    parts.push(`Tónina: ${escapeHtml(ch.keyFrom||'—')} → ${escapeHtml(ch.keyTo)}`);
   }
   const info = parts.length ? `<div style="margin-top:8px; white-space:pre-wrap;">${parts.join('\n')}</div>` : '';
 
@@ -7705,7 +7745,7 @@ function openChangeDetail(id){
     <div class="modal-hint" style="margin:0;">
       <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
         <div style="flex:1;">
-          <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
+          <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b></div>
           <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
         </div>
         <button class="btn-danger" id="ch-close-btn">Zavrieť</button>
@@ -7796,7 +7836,7 @@ function renderKeyHistorySection(songId, origKey){
 
   // baseline row:
   // - if first record has empty "from", it is the creation / first detected key -> use its timestamp (new songs)
-  // - otherwise show 1.1.2026 + "Pôvodná tonina: X" derived from first chord (existing songs without history)
+  // - otherwise show 1.1.2026 + "Pôvodná tónina: X" derived from first chord (existing songs without history)
   let baseTs = 0;
   let baseWho = "—";
   let baseKey = String(origKey||"");
@@ -7813,7 +7853,7 @@ function renderKeyHistorySection(songId, origKey){
   }
 
   const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
-  const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
+  const baseLine = baseKey ? `Pôvodná tónina: ${escapeHtml(baseKey)}` : '';
 
   const rows = list.map((r)=>{
     const ts = String(r.ts||"");
@@ -7821,7 +7861,7 @@ function renderKeyHistorySection(songId, origKey){
     const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
     const fromK = String(r.from||"");
     const toK = String(r.to||"");
-    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
+    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
     const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
     return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
   }).join('');
@@ -7831,7 +7871,7 @@ function renderKeyHistorySection(songId, origKey){
   return `
     <div class="kh-wrap">
       <div class="kh-head" onclick="toggleKeyHistory('${escapeAttr(sid)}')">
-        <span class="kh-title">História toniny</span>
+        <span class="kh-title">História tóniny</span>
         <span class="kh-caret" id="kh-caret-${escapeAttr(sid)}">▸</span>
       </div>
       <div class="kh-body" id="kh-body-${escapeAttr(sid)}" style="display:none;">
@@ -7892,7 +7932,7 @@ async function keyHistoryRefresh(songId){
       const baseEl = document.getElementById(`kh-base-${sid}`);
       if (baseEl){
         const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
-        const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
+        const baseLine = baseKey ? `Pôvodná tónina: ${escapeHtml(baseKey)}` : '';
         baseEl.innerHTML = `<span class="kh-who">${escapeHtml(baseWho)}</span><span class="kh-dt">${escapeHtml(baseDt)}</span><span class="kh-to">${baseLine}</span>`;
       }
 
@@ -7905,7 +7945,7 @@ async function keyHistoryRefresh(songId){
           const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
           const fromK = String(r.from||"");
           const toK = String(r.to||"");
-          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
+          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
           const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
           return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
         }).join('');

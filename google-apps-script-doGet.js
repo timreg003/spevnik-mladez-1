@@ -3,7 +3,7 @@
 // Owner login: password only (OWNER_PWD). Other admins: password only (stored hashed by password), owner may label them with a name.
 //
 // Features:
-// - Export XML file: "Spevník export" (root Drive). Compatible with Spevník+.
+// - Export XML file: "Spevník export" (Drive folder "Spevnik export"). Compatible with Spevník+.
 // - Drive folder "Playlisty" stores app JSON/text files (playlists, PiesneNaDnes, history, overrides, admin db, versions, changes, key history).
 // - Export backups visible in Drive folder "Spevník export - backupy" (keep last 5).
 // - Song versions (keep last 10) + trash/restore (owner).
@@ -15,6 +15,7 @@ const OWNER_PWD = "wert";
 const OWNER_NAME = "Timotej";
 
 const MAIN_FILE_NAME = "Spevník export";
+const MAIN_EXPORT_FOLDER = "Spevnik export";
 const FOLDER_NAME = "Playlisty";
 
 const EXPORT_BACKUP_FOLDER = "Spevník export - backupy";
@@ -55,7 +56,7 @@ function _handle_(e){
   // --- META ---
   if (action === "meta"){
     const folder = _getOrCreateFolder_();
-    const exportFile = _newestFileByNameRoot_(MAIN_FILE_NAME);
+    const exportFile = _getActiveExportFile_();
     const dnesFile = _newestFileByNameInFolder_("PiesneNaDnes", folder);
     const orderFile = _newestFileByNameInFolder_("PlaylistOrder", folder);
 
@@ -76,7 +77,7 @@ function _handle_(e){
 
   // --- DIAG ---
   if (action === "diag"){
-    const f = _newestFileByNameRoot_(MAIN_FILE_NAME);
+    const f = _getActiveExportFile_();
     if (!f) return out({ ok:true, exportFound:false, exportName: MAIN_FILE_NAME });
 
     let parsedOk = true, rootName = "", ns = "";
@@ -262,7 +263,7 @@ function _handle_(e){
 
     if (!id || !num || !title) return out({ ok:false, error:"missing_fields" });
 
-    const exportFile = _newestFileByNameRoot_(MAIN_FILE_NAME);
+    const exportFile = _getActiveExportFile_();
     if (!exportFile) return out({ ok:false, error:"missing_export_file" });
 
     const xmlText = exportFile.getBlob().getDataAsString("UTF-8");
@@ -375,6 +376,10 @@ function _handle_(e){
     const folder = _getOrCreateFolder_();
     const db = _readJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE) || { keys:{} };
     const arr = (db.keys && db.keys[id]) ? db.keys[id] : [];
+    // Prvý (pôvodný) riadok sa nesmie vymazať
+    if (arr.length && String(arr[0].ts) === ts){
+      return out({ ok:false, error:"cannot_delete_base" });
+    }
     db.keys[id] = arr.filter(x => String(x.ts) !== ts);
     _writeJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE, db);
     return out({ ok:true });
@@ -386,7 +391,9 @@ function _handle_(e){
     if (!id) return out({ ok:false, error:"missing_id" });
     const folder = _getOrCreateFolder_();
     const db = _readJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE) || { keys:{} };
-    db.keys[id] = [];
+    const arr = (db.keys && db.keys[id]) ? db.keys[id] : [];
+    // Zachovaj pôvodný (prvý) riadok
+    db.keys[id] = arr.length ? [arr[0]] : [];
     _writeJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE, db);
     return out({ ok:true });
   }
@@ -504,9 +511,8 @@ function _handle_(e){
   }
 
   // --- DEFAULT: return export XML ---
-  const newest = _newestFileByNameRoot_(MAIN_FILE_NAME);
+  const newest = _getActiveExportFile_();
   const xml = newest ? newest.getBlob().getDataAsString("UTF-8") : "";
-  _keepOnlyNewestRootExport_();
 
   if (callback) return out({ ok:true, xml });
   return ContentService.createTextOutput(xml).setMimeType(ContentService.MimeType.XML);
@@ -559,6 +565,48 @@ function _isDeletedMarker_(s){ return typeof s === 'string' && s.trim() === 'del
 function _getOrCreateFolder_(){
   const it = DriveApp.getFoldersByName(FOLDER_NAME);
   return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);
+}
+
+function _getOrCreateMainExportFolder_(){
+  const it = DriveApp.getFoldersByName(MAIN_EXPORT_FOLDER);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(MAIN_EXPORT_FOLDER);
+}
+
+function _getMainExportFile_(){
+  // Prefer "Spevnik export" folder (main). Fallback to root if user has it there.
+  let f = null;
+  try{
+    const folder = _getOrCreateMainExportFolder_();
+    f = _newestFileByNameInFolder_(MAIN_FILE_NAME, folder);
+  }catch(e){}
+  if (f) return f;
+  return _newestFileByNameRoot_(MAIN_FILE_NAME);
+}
+
+function _getNewestBackupExportFile_(){
+  try{
+    const folder = _ensureBackupFolder_();
+    // newest file in backup folder (any name)
+    const arr = [];
+    const it = folder.getFiles();
+    while (it.hasNext()){
+      const fi = it.next();
+      if (fi.isTrashed()) continue;
+      arr.push(fi);
+    }
+    arr.sort((a,b)=>b.getLastUpdated().getTime()-a.getLastUpdated().getTime());
+    return arr.length ? arr[0] : null;
+  }catch(e){ return null; }
+}
+
+function _getActiveExportFile_(){
+  // Choose the newest between main export and newest backup.
+  const main = _getMainExportFile_();
+  const bak = _getNewestBackupExportFile_();
+  const tm = main ? main.getLastUpdated().getTime() : 0;
+  const tb = bak ? bak.getLastUpdated().getTime() : 0;
+  if (tm === 0 && tb === 0) return null;
+  return (tb > tm) ? bak : main;
 }
 
 function _newestFileByNameInFolder_(name, folder){
@@ -654,9 +702,17 @@ function _backupExport_(xmlText){
 }
 
 function _publishExport_(xmlText){
+  // Nikdy nemaž hlavný súbor „Spevník export“ v priečinku „Spevnik export“.
+  // Zmeny vždy ukladaj ako backup, a aktívny export je „najnovší“ medzi main+backup.
   _backupExport_(xmlText);
-  DriveApp.createFile(MAIN_FILE_NAME, xmlText, MimeType.PLAIN_TEXT);
-  _keepOnlyNewestRootExport_();
+  try{
+    const mainFolder = _getOrCreateMainExportFolder_();
+    const existing = _newestFileByNameInFolder_(MAIN_FILE_NAME, mainFolder);
+    if (!existing){
+      // Ak main export ešte neexistuje, vytvor ho (len raz).
+      mainFolder.createFile(MAIN_FILE_NAME, xmlText, MimeType.PLAIN_TEXT);
+    }
+  }catch(e){}
 }
 
 function _isOwnerPwd_(pwd){ return String(pwd||"") === OWNER_PWD; }

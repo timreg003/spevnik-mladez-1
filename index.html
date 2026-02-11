@@ -5,17 +5,17 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <title>Mládežnícky spevník NIŽNÁ</title>
-<link href="manifest.json?v=106" rel="manifest"/>
+<link href="manifest.json?v=108" rel="manifest"/>
 <meta content="#00bfff" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="Spevník" name="apple-mobile-web-app-title"/>
-<link href="icon.png?v=106" rel="apple-touch-icon"/>
-<link href="icon.png?v=106" rel="icon" type="image/png"/>
+<link href="icon.png?v=108" rel="apple-touch-icon"/>
+<link href="icon.png?v=108" rel="icon" type="image/png"/>
 <link crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
-<link href="style.css?v=106" rel="stylesheet">
-</link></link></link></head>
+<link href="style.css?v=108" rel="stylesheet"/>
+</head>
 <body>
 <div class="toast" id="toast" style="display:none;"></div>
 <div class="status-panel" id="statusPanel" style="display:none;">
@@ -43,8 +43,8 @@
 <div id="admin-userline" class="admin-userline" style="display:none;" onclick="showMyRights()"></div>
 <!-- LIST VIEW -->
 <div id="song-list">
-<div id="top-actions" style="display:none; margin:8px 0; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-  <button class="btn-neutral" id="song-new-btn-list" onclick="openSongEditorNew()"><i class="fas fa-plus"></i> Nová pieseň</button>
+<div id="top-actions" style="display:none; margin:8px 0; gap:10px; flex-wrap:wrap; align-items:center;">
+  <button class="btn-neutral" id="song-new-btn-list" onclick="openSongEditorNew()" style="display:none;"><i class="fas fa-plus"></i> Nová pieseň</button>
   <button class="btn-neutral" id="admins-open-btn" onclick="toggleEditor('admins-editor-panel')" style="display:none;"><i class="fas fa-user-shield"></i> Správa adminov</button>
   <button class="btn-neutral" id="changes-open-btn" onclick="toggleEditor('changes-editor-panel')" style="display:none;"><i class="fas fa-clock-rotate-left"></i> Zmeny</button>
 </div>
@@ -313,7 +313,7 @@
 <span class="psSpeed" id="psSpeed">Rýchlosť: 1</span>
 <button aria-label="Ukončiť" id="psExit" onclick="exitPresentationMode()"><i class="fas fa-xmark"></i></button>
 </div>
-<script src="script.js?v=106"></script>
+<script src="script.js?v=108"></script>
 <!-- FORM EDITOR MODAL -->
 <div class="modal-overlay" id="form-modal" style="display:none;">
 <div aria-labelledby="form-modal-title" aria-modal="true" class="modal-sheet" role="dialog">
@@ -410,10 +410,7 @@
 <div class="chord-label">Typ</div>
 <div class="chord-btns" id="chord-quals"></div>
 </div>
-<div class="chord-row">
-<div class="chord-label">Bas</div>
-<div class="chord-btns" id="chord-bass"></div>
-</div>
+<!-- Basové akordy nepoužívame (odstránené) -->
 <div class="chord-preview">
 <span class="tiny-label">Akord:</span>
 <span class="chord-preview-val" id="chord-preview">—</span>
@@ -431,7 +428,7 @@
   <button class="btn-neutral" onclick="editorTransposeReset()" type="button">Reset</button>
   <button class="btn-neutral" onclick="editorTranspose(1)" type="button">Akordy +</button>
 </div>
-Tip: Najprv vyber „Základ“, potom „Typ“ a prípadne „Bas“ (napr. D + m + /F# → <b>[Dm/F#]</b>).</div>
+Tip: Najprv vyber „Základ“, potom „Typ“ (napr. D + m → <b>[Dm]</b>).</div>
 </div>
 </div>
 <div class="modal-block" id="song-versions-block" style="display:none;">

@@ -160,6 +160,34 @@ body { margin:0; font-family:'Inter',sans-serif; background:#121212; color:#e0e0
   margin-bottom:10px;
 }
 
+/* Editor zoznam (admini, zmeny...) */
+.editor-item{
+  padding: 10px;
+  border-bottom: 1px solid #333;
+  background: #121212;
+  color: #fff;
+}
+.editor-item:last-child{ border-bottom:none; }
+.editor-item.unread-item{
+  border-left: 4px solid #00bfff;
+  background: rgba(0,191,255,0.10);
+}
+
+/* História tóniny */
+.kh-wrap{ border:1px solid #333; border-radius:12px; overflow:hidden; margin-top:12px; background:#111; }
+.kh-head{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; cursor:pointer; }
+.kh-title{ font-weight:900; color:#00bfff; }
+.kh-body{ padding:10px 12px; border-top:1px solid #333; }
+.kh-rowwrap{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.kh-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.07); flex:1; }
+.kh-rows .kh-row{ }
+.kh-rows .kh-rowwrap:last-child .kh-row{ border-bottom:none; }
+.kh-who{ font-weight:800; opacity:0.95; }
+.kh-dt{ opacity:0.8; }
+.kh-to{ opacity:0.95; }
+.kh-del{ border:none; background:#ff4444; color:#fff; border-radius:10px; padding:6px 9px; font-weight:900; }
+.kh-actions{ margin-top:10px; display:flex; justify-content:flex-end; }
+
 .draggable-item{
   display:flex; align-items:center; justify-content:space-between;
   gap:10px; padding:10px 10px;
@@ -1249,7 +1277,8 @@ body.present #presentControls{ display:flex; }
 
 /* ===== v96 status panel (2 riadky) ===== */
 .status-panel{
-  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%);
+  /* Offline/online + sync stav: vpravo dole, nech nezavadzia */
+  position: fixed; right: 14px; bottom: 14px; left: auto; transform: none;
   display: flex; flex-direction: column; gap: 6px;
   z-index: 999999; max-width: 92vw; pointer-events: none;
 }
