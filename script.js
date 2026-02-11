@@ -196,8 +196,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v104';
-const APP_CACHE_NAME = 'spevnik-v104';
+const APP_BUILD = 'v105';
+const APP_CACHE_NAME = 'spevnik-v105';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -584,6 +584,11 @@ function applyPermsToUI(){
   if (chPanel) chPanel.style.display = (logged && isOwner()) ? 'block' : 'none';
   if (chPanel && chPanel.style.display === 'block') chPanel.classList.add('collapsed');
 
+  // owner-only: trash panel
+  const trPanel = document.getElementById('trash-editor-panel');
+  if (trPanel) trPanel.style.display = (logged && isOwner()) ? 'block' : 'none';
+  if (trPanel && trPanel.style.display === 'block') trPanel.classList.add('collapsed');
+
   // top actions row (Nová pieseň + owner tools)
   const topActions = document.getElementById('top-actions');
   if (topActions) topActions.style.display = (logged && (hasPerm('D') || hasPerm('E') || isOwner())) ? 'flex' : 'none';
@@ -596,6 +601,9 @@ function applyPermsToUI(){
 
   const changesBtn = document.getElementById('changes-open-btn');
   if (changesBtn) changesBtn.style.display = (logged && isOwner()) ? '' : 'none';
+
+  const trashBtn = document.getElementById('trash-open-btn');
+  if (trashBtn) trashBtn.style.display = (logged && isOwner()) ? '' : 'none';
 
   // collapse on show
   if (dnesPanel && dnesPanel.style.display === 'block') dnesPanel.classList.add('collapsed');
@@ -1009,6 +1017,7 @@ function toggleEditor(panelId){
     try{
       if (panelId === 'admins-editor-panel') adminRefresh();
       if (panelId === 'changes-editor-panel') loadChangesList();
+      if (panelId === 'trash-editor-panel') loadTrashList();
     }catch(e){}
   }
 }
@@ -7445,7 +7454,7 @@ function renderAdminsList(){
   }
   _adminsCache.forEach(a=>{
     const row = document.createElement('div');
-    row.className = 'editor-item';
+    row.className = 'editor-item editor-item--sep';
     row.style.display='flex';
     row.style.justifyContent='space-between';
     row.style.alignItems='center';
@@ -7623,6 +7632,8 @@ async function loadChangesList(){
         numberTo: String(ch.numberTo||''),
         keyFrom: String(ch.keyFrom||''),
         keyTo: String(ch.keyTo||''),
+        before: ch.before || null,
+        after: ch.after || null,
         unread: !(seen && seen[id])
       };
     });
@@ -7633,6 +7644,31 @@ async function loadChangesList(){
   }
 }
 
+
+function renderChangeDiff(ch){
+  try{
+    if (!ch) return '';
+    const before = ch.before;
+    const after = ch.after;
+    if (!before && !after) return '';
+    const a = (before && before.songtext != null) ? String(before.songtext) : '';
+    const b = (after && after.songtext != null) ? String(after.songtext) : '';
+    // Use existing diff renderer (line-based, changed lines highlighted)
+    const diffHtml = _diffHtml(a, b);
+
+    const metaRows = [];
+    const bNum = before ? String(before.author||'') : '';
+    const aNum = after ? String(after.author||'') : '';
+    const bTitle = before ? _stripHashTags(String(before.title||'')) : '';
+    const aTitle = after ? _stripHashTags(String(after.title||'')) : '';
+    if (bTitle !== aTitle) metaRows.push(`<div><b>Názov:</b> ${escapeHtml(bTitle||'—')} → ${escapeHtml(aTitle||'—')}</div>`);
+    if (bNum !== aNum) metaRows.push(`<div><b>Číslo:</b> ${escapeHtml(bNum||'—')} → ${escapeHtml(aNum||'—')}</div>`);
+    if (metaRows.length){
+      return `<div class="modal-hint" style="margin-top:10px;">${metaRows.join('')}</div>` + diffHtml;
+    }
+    return diffHtml;
+  }catch(e){ return ''; }
+}
 function renderChangesList(){
   const box = document.getElementById('changes-list');
   if (!box) return;
@@ -7645,19 +7681,24 @@ function renderChangesList(){
 
   _changesCache.forEach(ch=>{
     const row = document.createElement('div');
-    row.className = 'editor-item';
+    row.className = 'editor-item editor-item--sep';
     if (ch.unread) row.classList.add('unread-item');
 
     const when = escapeHtml(_fmtSkDate(ch.ts, true));
     const who = escapeHtml(ch.who || '');
-    const title = escapeHtml(ch.title || '');
+    const title = escapeHtml(_stripHashTags(ch.title || ''));
     const num = escapeHtml(ch.number || '');
     const types = escapeHtml(_typesLabel(ch.types));
+    const summaryParts = [];
+    if (ch.titleFrom && ch.titleTo && _stripHashTags(ch.titleFrom) !== _stripHashTags(ch.titleTo)) summaryParts.push(`Názov: ${escapeHtml(_stripHashTags(ch.titleFrom))} → ${escapeHtml(_stripHashTags(ch.titleTo))}`);
+    if (ch.numberFrom && ch.numberTo && String(ch.numberFrom) !== String(ch.numberTo)) summaryParts.push(`Číslo: ${escapeHtml(ch.numberFrom)} → ${escapeHtml(ch.numberTo)}`);
+    if (ch.keyTo && String(ch.keyFrom||'') !== String(ch.keyTo)) summaryParts.push(`Tónina: ${escapeHtml(ch.keyFrom||'—')} → ${escapeHtml(ch.keyTo)}`);
+    const summary = summaryParts.length ? `<div class="small-muted" style="margin-top:4px; white-space:pre-wrap;">${summaryParts.join('\n')}</div>` : '';
 
     row.innerHTML = `<div style="display:flex; justify-content:space-between; gap:10px;">
       <div style="flex:1; min-width:0;">
-        <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
-        <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+        <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b></div>
+        <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>${summary}
       </div>
       <div><button class="btn-neutral">Detail</button></div>
     </div>`;
@@ -7673,14 +7714,14 @@ function openChangeDetail(id){
   const det = document.getElementById('changes-detail');
   if (!det || !ch) return;
 
-  const title = escapeHtml(ch.title || '');
+  const title = escapeHtml(_stripHashTags(ch.title || ''));
   const num = escapeHtml(ch.number || '');
   const types = escapeHtml(_typesLabel(ch.types));
   const who = escapeHtml(ch.who || '');
   const when = escapeHtml(_fmtSkDate(ch.ts, true));
 
   const parts = [];
-  if (ch.titleFrom && ch.titleFrom !== ch.titleTo) parts.push(`Názov: ${escapeHtml(ch.titleFrom)} → ${escapeHtml(ch.titleTo)}`);
+  if (ch.titleFrom && ch.titleFrom !== ch.titleTo) parts.push(`Názov: ${escapeHtml(_stripHashTags(ch.titleFrom))} → ${escapeHtml(_stripHashTags(ch.titleTo))}`);
   if (ch.numberFrom && ch.numberFrom !== ch.numberTo) parts.push(`Číslo: ${escapeHtml(ch.numberFrom)} → ${escapeHtml(ch.numberTo)}`);
   if (ch.keyTo && ch.keyFrom !== ch.keyTo){
     parts.push(`Tonina: ${escapeHtml(ch.keyFrom||'—')} → ${escapeHtml(ch.keyTo)}`);
@@ -7692,12 +7733,13 @@ function openChangeDetail(id){
     <div class="modal-hint" style="margin:0;">
       <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
         <div style="flex:1;">
-          <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b> <span class="small-muted">#${escapeHtml(ch.songId||'')}</span></div>
-          <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>
+          <div><b>${num ? (num + '. ') : ''}${title || '(bez názvu)'}</b></div>
+          <div class="small-muted">${types}${who?(' • '+who):''}${when?(' • '+when):''}</div>${summary}
         </div>
         <button class="btn-danger" id="ch-close-btn">Zavrieť</button>
       </div>
       ${info}
+      ${renderChangeDiff(ch)}
       <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn-primary" id="ch-open-song">Otvoriť pieseň</button>
       </div>
@@ -7723,6 +7765,105 @@ async function closeChangeDetail(){
     renderChangesList();
   }catch(e){}
 }
+
+// ===== OWNER: KÔŠ =====
+let _trashCache = [];
+
+function _stripHashTags(title){
+  const t = String(title||'');
+  const i = t.indexOf('#');
+  return (i >= 0 ? t.slice(0, i) : t).trim();
+}
+
+async function loadTrashList(){
+  if (!isOwner()) return;
+  const box = document.getElementById('trash-list');
+  if (box) box.innerHTML = '<div class="small-muted">Načítavam…</div>';
+  try{
+    const data = await jsonpRequest(`${SCRIPT_URL}?action=songTrashList&pwd=${encodeURIComponent(getAuthPwd())}`);
+    if (!data || !data.ok){
+      if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať kôš.</div>';
+      return;
+    }
+    _trashCache = Array.isArray(data.list) ? data.list : [];
+    renderTrashList();
+  }catch(e){
+    if (box) box.innerHTML = '<div class="small-muted">Nepodarilo sa načítať kôš.</div>';
+  }
+}
+
+function renderTrashList(){
+  const box = document.getElementById('trash-list');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!_trashCache.length){
+    box.innerHTML = '<div class="small-muted">(Kôš je prázdny)</div>';
+    return;
+  }
+
+  _trashCache.forEach(item=>{
+    const id = String(item.songId||'');
+    const who = escapeHtml(String(item.who||''));
+    const when = escapeHtml(_fmtSkDate(Number(item.ts||0)||0, true));
+    const num = escapeHtml(String(item.number||''));
+    const title = escapeHtml(_stripHashTags(String(item.title||'')) || '(bez názvu)');
+
+    const row = document.createElement('div');
+    row.className = 'editor-item editor-item--sep';
+    row.innerHTML = `
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+        <div style="flex:1; min-width:0;">
+          <div><b>${num ? (num + '. ') : ''}${title}</b></div>
+          <div class="small-muted">${who ? (who + ' • ') : ''}${when}</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn-primary">Obnoviť</button>
+          <button class="btn-danger">Natrvalo</button>
+        </div>
+      </div>
+    `;
+    const btns = row.querySelectorAll('button');
+    btns[0].onclick = ()=>restoreFromTrash(id);
+    btns[1].onclick = ()=>deletePermanentFromTrash(id);
+    box.appendChild(row);
+  });
+}
+
+async function restoreFromTrash(songId){
+  if (!isOwner()) return;
+  const id = String(songId||'');
+  if (!id) return;
+  if (!confirm('Obnoviť pieseň z koša?')) return;
+  if (!navigator.onLine){ showToast('Si offline – nedá sa obnoviť.', false, 2200); return; }
+  try{
+    showToast('Obnovujem…', true, 0);
+    await jsonpSave({ action:'songRestore', pwd:getAuthPwd(), id });
+    await updateSeenMetaFromServer();
+    await runUpdateNow(true);
+    showToast('Obnovené ✅', true, 1600);
+    await loadTrashList();
+  }catch(e){
+    showToast('Zlyhalo.', false, 2200);
+  }
+}
+
+async function deletePermanentFromTrash(songId){
+  if (!isOwner()) return;
+  const id = String(songId||'');
+  if (!id) return;
+  if (!confirm('Natrvalo vymazať pieseň z koša? Toto sa nedá vrátiť.')) return;
+  if (!navigator.onLine){ showToast('Si offline – nedá sa vymazať.', false, 2200); return; }
+  try{
+    showToast('Mažem…', true, 0);
+    await jsonpSave({ action:'songDeletePermanent', pwd:getAuthPwd(), id });
+    showToast('Vymazané ✅', true, 1600);
+    await loadTrashList();
+  }catch(e){
+    showToast('Zlyhalo.', false, 2200);
+  }
+}
+
+
 
 
 // Helper for places where we may only know numeric "author" (originalId) or the internal XML <ID>.
@@ -7783,7 +7924,7 @@ function renderKeyHistorySection(songId, origKey){
 
   // baseline row:
   // - if first record has empty "from", it is the creation / first detected key -> use its timestamp (new songs)
-  // - otherwise show 1.1.2026 + "Pôvodná tonina: X" derived from first chord (existing songs without history)
+  // - otherwise show 1.1.2026 + "Pôvodná tónina: X" derived from first chord (existing songs without history)
   let baseTs = 0;
   let baseWho = "—";
   let baseKey = String(origKey||"");
@@ -7800,7 +7941,7 @@ function renderKeyHistorySection(songId, origKey){
   }
 
   const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
-  const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
+  const baseLine = baseKey ? `Pôvodná tónina: ${escapeHtml(baseKey)}` : '';
 
   const rows = list.map((r)=>{
     const ts = String(r.ts||"");
@@ -7808,7 +7949,7 @@ function renderKeyHistorySection(songId, origKey){
     const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
     const fromK = String(r.from||"");
     const toK = String(r.to||"");
-    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
+    const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
     const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
     return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
   }).join('');
@@ -7818,13 +7959,13 @@ function renderKeyHistorySection(songId, origKey){
   return `
     <div class="kh-wrap">
       <div class="kh-head" onclick="toggleKeyHistory('${escapeAttr(sid)}')">
-        <span class="kh-title">História toniny</span>
+        <span class="kh-title">História tóniny</span>
         <span class="kh-caret" id="kh-caret-${escapeAttr(sid)}">▸</span>
       </div>
       <div class="kh-body" id="kh-body-${escapeAttr(sid)}" style="display:none;">
         ${baseline}
         <div class="kh-rows" id="kh-rows-${escapeAttr(sid)}">${rows}</div>
-        ${isOwner() ? `<div class="kh-actions"><button class="btn-neutral" onclick="keyHistoryClear('${escapeAttr(sid)}'); event.stopPropagation();">Vymazať históriu</button></div>` : ``}
+        ${isOwner() ? `<div class="kh-actions"><button class="btn-neutral" onclick="keyHistoryClear('${escapeAttr(sid)}'); event.stopPropagation();">Vymazať históriu (okrem pôvodnej)</button></div>` : ``}
       </div>
     </div>
   `;
@@ -7879,7 +8020,7 @@ async function keyHistoryRefresh(songId){
       const baseEl = document.getElementById(`kh-base-${sid}`);
       if (baseEl){
         const baseDt = baseTs ? _fmtSkDate(baseTs, false) : KEY_HIST_DEFAULT_DATE;
-        const baseLine = baseKey ? `Pôvodná tonina: ${escapeHtml(baseKey)}` : '';
+        const baseLine = baseKey ? `Pôvodná tónina: ${escapeHtml(baseKey)}` : '';
         baseEl.innerHTML = `<span class="kh-who">${escapeHtml(baseWho)}</span><span class="kh-dt">${escapeHtml(baseDt)}</span><span class="kh-to">${baseLine}</span>`;
       }
 
@@ -7892,7 +8033,7 @@ async function keyHistoryRefresh(songId){
           const dt = _fmtSkDate(Number(r.ts||0)||0, true) || KEY_HIST_DEFAULT_DATE;
           const fromK = String(r.from||"");
           const toK = String(r.to||"");
-          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tonina: ${escapeHtml(toK)}` : '');
+          const line = fromK ? `${escapeHtml(fromK)} → ${escapeHtml(toK)}` : (toK ? `Pôvodná tónina: ${escapeHtml(toK)}` : '');
           const del = isOwner() ? `<button class="kh-del" title="Vymazať" onclick="keyHistoryDelete('${escapeAttr(sid)}','${escapeAttr(ts)}'); event.stopPropagation();">🗑</button>` : '';
           return `<div class="kh-rowwrap"><div class="kh-row"><span class="kh-who">${escapeHtml(who)}</span><span class="kh-dt">${escapeHtml(dt)}</span><span class="kh-to">${line}</span></div>${del}</div>`;
         }).join('');
@@ -7913,7 +8054,7 @@ async function keyHistoryDelete(songId, ts){
 async function keyHistoryClear(songId){
   if (!isOwner()) return;
   const sid = String(songId||"");
-  if (!confirm('Vymazať históriu toniny?')) return;
+  if (!confirm('Vymazať históriu (okrem pôvodnej) toniny?')) return;
   try{
     await jsonpSave({ action:'keyHistoryClear', pwd:getAuthPwd(), id:sid });
     _khSaveCache(sid, { list: [] });
