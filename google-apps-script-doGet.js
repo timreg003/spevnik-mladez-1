@@ -345,6 +345,73 @@ function _handle_(e){
     return out({ ok:true });
   }
 
+  // --- SONG DELETE (owner, permanent) ---
+  if (action === "songDeletePermanent"){
+    if (!_isOwnerPwd_(String(p.pwd||""))) return out({ ok:false, error:"unauthorized" });
+    const id = String(p.id||"").trim();
+    if (!id) return out({ ok:false, error:"missing_id" });
+
+    const exportFile = _getActiveExportFile_();
+    if (!exportFile) return out({ ok:false, error:"missing_export_file" });
+
+    const xmlText = exportFile.getBlob().getDataAsString("UTF-8");
+    let doc;
+    try{ doc = XmlService.parse(xmlText); }catch(e){ return out({ ok:false, error:"export_parse_failed", detail:String(e) }); }
+
+    const root = doc.getRootElement();
+    const ns = root.getNamespace();
+    const songs = root.getChildren("song", ns);
+    let songEl = null;
+    for (let i=0;i<songs.length;i++){
+      const sid = _getChildText_(songs[i], ns, "ID");
+      if (String(sid) === id){ songEl = songs[i]; break; }
+    }
+    if (!songEl) return out({ ok:false, error:"not_found" });
+
+    // capture plain before delete (for changes log)
+    let oldPlain = null;
+    try{ oldPlain = _songToPlain_(songEl, ns); }catch(e){}
+
+    // remove from XML
+    try{ root.removeContent(songEl); }catch(e){
+      // fallback: rebuild list
+      try{
+        const idx = songs.indexOf(songEl);
+        if (idx >= 0) songs.splice(idx,1);
+      }catch(_){}
+    }
+
+    const newXml = XmlService.getPrettyFormat().format(doc);
+    _publishExport_(newXml);
+
+    // delete related metadata (versions, key history)
+    try{
+      const folder = _getOrCreateFolder_();
+      const vdb = _readJsonFileInFolder_(folder, SONG_VERSIONS_FILE) || { versions:{} };
+      if (vdb.versions && vdb.versions[id]) delete vdb.versions[id];
+      _writeJsonFileInFolder_(folder, SONG_VERSIONS_FILE, vdb);
+    }catch(e){}
+    try{
+      const folder = _getOrCreateFolder_();
+      const kdb = _readJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE) || { keys:{} };
+      if (kdb.keys && kdb.keys[id]) delete kdb.keys[id];
+      _writeJsonFileInFolder_(folder, SONG_KEY_HISTORY_FILE, kdb);
+    }catch(e){}
+
+    // append change entry
+    try{
+      const who = OWNER_NAME;
+      _appendChanges_(id, oldPlain ? String(oldPlain.author||"") : "", oldPlain ? String(oldPlain.title||"") : "", who, {
+        existed:true,
+        oldPlain: oldPlain,
+        newPlain:{ id, num:"", title:"(vymazané)", songtext:"" },
+        transposeStep:null
+      });
+    }catch(e){}
+
+    return out({ ok:true });
+  }
+
   // --- SONG VERSIONS (owner) ---
   if (action === "songVersions"){
     if (!_isOwnerPwd_(String(p.pwd||""))) return out({ ok:false, error:"unauthorized" });
@@ -865,7 +932,10 @@ function _appendChanges_(songId, num, title, who, ctx){
     numberFrom: oldPlain ? String(oldPlain.author||"") : "",
     numberTo: String(num||""),
     keyFrom: oldKey,
-    keyTo: newKey
+    keyTo: newKey,
+    // For detail diff in UI (available for newer entries)
+    textFrom: oldPlain ? String(oldPlain.songtext||"") : "",
+    textTo: String(newPlain.songtext||"")
   });
 
   while (db.list.length > SONG_CHANGES_KEEP) db.list.pop();

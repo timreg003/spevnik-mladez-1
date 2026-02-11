@@ -201,8 +201,8 @@ async function runUpdateNow(fromAuto=false){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v108';
-const APP_CACHE_NAME = 'spevnik-v108';
+const APP_BUILD = 'v109';
+const APP_CACHE_NAME = 'spevnik-v109';
 
 // Polling interval for checking updates / overrides (30s = svižné, no bez zbytočného zaťaženia)
 const POLL_INTERVAL_MS = 30 * 1000;
@@ -332,6 +332,13 @@ let lastXmlSyncBytes = 0;
 /* ===== JSONP helper (bypasses CORS for Apps Script) ===== */
 function jsonpRequest(url){
   return new Promise((resolve, reject) => {
+
+    // Defensive: some callers may accidentally concatenate text into URL.
+    // Keep only the first whitespace-separated token (real URL) and trim.
+    try{
+      url = String(url||'').trim();
+      if (url.includes(' ')) url = url.split(/\s+/)[0];
+    }catch(e){}
 
     // diagnostics: track last GAS(JSONP) call
     try{
@@ -4525,28 +4532,25 @@ async function saveLitOverridesToDrive(opts){
   try{
     if (!SCRIPT_URL) return false;
 
-    // Admin C (non-owner): save just one override entry (or delete it) via dedicated endpoints
+    // Admin C (non-owner): save just one override entry (or delete it)
     if (!isOwner() && hasPerm('C')){
       const key = opts && opts.key ? String(opts.key||'') : '';
       if (!key) return false;
 
       if (opts && opts.del){
-        const url = `${SCRIPT_URL_POST}&action=litOverrideDelete&pwd=${encodeURIComponent(getAuthPwd())}&key=${encodeURIComponent(key)}`;
-        const res = await jsonpRequest(url);
+        const res = await jsonpSave({ action:'litOverrideDelete', pwd:getAuthPwd(), key });
         return !!(res && res.ok);
       }
 
       const payloadObj = (opts && opts.payload) ? opts.payload : {};
-      const url = `${SCRIPT_URL_POST}&action=litOverrideSave&pwd=${encodeURIComponent(getAuthPwd())}&key=${encodeURIComponent(key)}&payload=${encodeURIComponent(JSON.stringify(payloadObj))}`;
-      const res = await jsonpRequest(url);
+      const res = await jsonpSave({ action:'litOverrideSave', pwd:getAuthPwd(), key, payload: JSON.stringify(payloadObj) });
       return !!(res && res.ok);
     }
 
     // Owner: save full overrides file (system file) in one write
     const obj = getLitOverrides();
     obj.updatedAt = Date.now();
-    const url = `${SCRIPT_URL_POST}&action=save&pwd=${encodeURIComponent(getAuthPwd())}&name=${encodeURIComponent(LIT_OVERRIDES_FILE)}&content=${encodeURIComponent(JSON.stringify(obj))}`;
-    const res = await jsonpRequest(url);
+    const res = await jsonpSave({ action:'save', pwd:getAuthPwd(), name: LIT_OVERRIDES_FILE, content: JSON.stringify(obj) });
     if (res && res.ok){
       __litOverrides = obj;
       try { localStorage.setItem(LIT_OVERRIDES_CACHE_KEY, JSON.stringify(obj)); } catch(e){}
@@ -6929,7 +6933,8 @@ async function saveSongEditor(){
     return;
   }
 
-  // D-mode: chords must not change
+  // D-mode: chords must not change, except when the change is a pure transposition
+  // (admin D is allowed to transpose + edit lyrics outside brackets).
   const mode = hasPerm('E') ? 'E' : 'D';
   if (mode === 'D'){
     try{
@@ -6938,8 +6943,20 @@ async function saveSongEditor(){
       const chordsA = (baseText.match(/\[[^\]]*\]/g) || []).join('|');
       const chordsB = (txt.match(/\[[^\]]*\]/g) || []).join('|');
       if (chordsA !== chordsB){
-        showToast('V režime D sa akordy nesmú meniť.', false, 2600);
-        return;
+        // allow only if the chord sequence matches a transposed version of the original
+        const step = Number(__editorTransposeTotalStep||0);
+        if (step && isFinite(step) && Math.abs(step) <= 11){
+          const transCh = (baseText.replace(CHORD_TOKEN_RE_G, (m0, c) => `[${_transposeChordStrict(c, step)}]`).match(/\[[^\]]*\]/g) || []).join('|');
+          if (transCh === chordsB){
+            // ok: pure transposition
+          } else {
+            showToast('V režime D sa akordy nesmú meniť (okrem transpozície).', false, 2800);
+            return;
+          }
+        } else {
+          showToast('V režime D sa akordy nesmú meniť.', false, 2600);
+          return;
+        }
       }
     }catch(e){}
   }
@@ -6999,7 +7016,7 @@ async function saveSongEditor(){
 async function deleteSongEditor(){
   if (!isOwner()) return;
   if (!seEditingId) return;
-  if (!confirm('Naozaj vymazať túto pieseň? (pôjde do koša)')) return;
+  if (!confirm('Naozaj natrvalo vymazať túto pieseň?')) return;
 
   // local backup snapshot
   try{ loadSongEdits(); delete songEdits[seEditingId]; saveSongEditsLocal(); }catch(e){}
@@ -7013,10 +7030,10 @@ async function deleteSongEditor(){
   showToast('Mažem...', true, 0);
 
   try{
-    await jsonpSave({ action:'songTrash', pwd:getAuthPwd(), id: String(seEditingId) });
+    await jsonpSave({ action:'songDeletePermanent', pwd:getAuthPwd(), id: String(seEditingId) });
     await updateSeenMetaFromServer();
     await runUpdateNow(true);
-    showToast('Presunuté do koša', true, 1500);
+    showToast('Vymazané', true, 1500);
     closeSongEditor(true);
   }catch(e){
     showToast('Zlyhalo.', false, 2000);
@@ -7676,6 +7693,8 @@ async function loadChangesList(){
         numberTo: String(ch.numberTo||''),
         keyFrom: String(ch.keyFrom||''),
         keyTo: String(ch.keyTo||''),
+        textFrom: (ch.textFrom != null) ? String(ch.textFrom) : '',
+        textTo: (ch.textTo != null) ? String(ch.textTo) : '',
         unread: !(seen && seen[id])
       };
     });
@@ -7740,6 +7759,14 @@ function openChangeDetail(id){
   }
   const info = parts.length ? `<div style="margin-top:8px; white-space:pre-wrap;">${parts.join('\n')}</div>` : '';
 
+  // Side-by-side diff (only available for newer change entries)
+  let diffHtml = '';
+  try{
+    if ((ch.textFrom || ch.textTo) && ch.textFrom !== ch.textTo){
+      diffHtml = `<div style="margin-top:12px;">${_diffHtml(ch.textFrom||'', ch.textTo||'')}</div>`;
+    }
+  }catch(e){}
+
   det.style.display='block';
   det.innerHTML = `
     <div class="modal-hint" style="margin:0;">
@@ -7751,6 +7778,7 @@ function openChangeDetail(id){
         <button class="btn-danger" id="ch-close-btn">Zavrieť</button>
       </div>
       ${info}
+      ${diffHtml}
       <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn-primary" id="ch-open-song">Otvoriť pieseň</button>
       </div>
@@ -7760,6 +7788,15 @@ function openChangeDetail(id){
     try{ openSongByAnyId(String(ch.songId||'')); }catch(e){}
   };
   det.querySelector('#ch-close-btn').onclick = ()=>closeChangeDetail();
+
+  // Mark as read immediately (so it won't stay blue if user closes by other means)
+  if (ch.unread){
+    try{
+      jsonpRequest(`${SCRIPT_URL}?action=changesSeenSet&pwd=${encodeURIComponent(getAuthPwd())}&payload=${encodeURIComponent(JSON.stringify({ ids:[_changesOpenId], seen:true }))}`);
+    }catch(e){}
+    _changesCache = _changesCache.map(x=> (String(x.id)===_changesOpenId ? { ...x, unread:false } : x));
+    renderChangesList();
+  }
 }
 
 async function closeChangeDetail(){
