@@ -1223,6 +1223,34 @@ body.present #presentControls{ display:flex; }
   font-size: 1.16em;
 }
 
+.kbs-psalm-refrain-top{
+  margin: 6px 0 8px 0;
+  padding: 2px 10px;
+  border-left: 3px solid rgba(77,163,255,0.85);
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  font-weight: 750;
+  font-style: italic;
+  font-size: 1.14em;
+}
+
+.kbs-psalm-stanza-gap{
+  height: 1em;
+}
+
+.kbs-accl-title{
+  margin: 10px 0 2px 0;
+  font-weight: 900;
+  font-style: italic;
+  font-size: 1.38em;
+  color: #ffffff;
+}
+
+.kbs-accl-verse{
+  margin: 2px 0 10px 0;
+  font-size: 1.02em;
+}
+
 
 .kbs-lit-intro{
   margin: 8px 0 4px 0;

@@ -279,11 +279,11 @@ function syncRetryNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v113';
-const APP_CACHE_NAME = 'spevnik-v113';
+const APP_BUILD = 'v114';
+const APP_CACHE_NAME = 'spevnik-v114';
 
 function _buildNum(){
-  // APP_BUILD is like "v113"
+  // APP_BUILD is like "v114"
   const m = String(APP_BUILD||'').match(/(\d+)/);
   return m ? m[1] : '0';
 }
@@ -5717,6 +5717,16 @@ function _litKbsLikeHtmlFromText(rawText){
   let lastH4 = '';
   let afterVerse = false;
   let expectBriefAfterIntro = false;
+  let pendingPsalmRefrain = null;
+  let expectAcclVerseNext = false;
+
+  function peekNextNonEmpty(idx){
+    for (let j=idx+1;j<lines.length;j++){
+      const t = String(lines[j]||'').trim();
+      if (t) return t;
+    }
+    return '';
+  }
 
   function esc(x){ return escapeHtml(String(x||'')); }
 
@@ -5740,6 +5750,28 @@ if (expectBriefAfterIntro){
   continue;
 }
 
+// if we printed Aleluja/pôstne zvolanie title, style the very next line as the verse
+if (expectAcclVerseNext){
+  const t = String(line||'').trim();
+  html += '<div class="kbs-accl-verse">'+esc(t)+'</div>';
+  expectAcclVerseNext = false;
+  continue;
+}
+
+    // Buffer psalm refrain line that sometimes comes before "Responzóriový žalm"
+    if (!inPsalm && pendingPsalmRefrain===null){
+      const tBuf = String(line||'').trim();
+      const tBufNorm = tBuf.replace(/^[\s>*\-_•]+/g,'').trim();
+      if (/^R\s*[\.:]/i.test(tBufNorm)){
+        const next = peekNextNonEmpty(i).trim();
+        const nextNorm = next.replace(/^[\s>*\-_•]+/g,'').trim();
+        if (/^Responzóriový\s+žalm\b/i.test(nextNorm) || /^#{4,5}\s+Responzóriový\s+žalm\b/i.test(nextNorm)){
+          pendingPsalmRefrain = tBuf;
+          continue;
+        }
+      }
+    }
+
     // headings
     if (/^#{5}\s+/.test(line)){
       const h5 = line.replace(/^#{5}\s+/, '').trim();
@@ -5748,6 +5780,7 @@ if (expectBriefAfterIntro){
         // medzi veršom/aklamáciou a evanjeliom nech sú dva prázdne riadky (aj keď Evanjelium je #####)
         html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
       }
+      if (inPsalm) html += '<div class="kbs-gap"></div>';
       inPsalm = false;
       expectBriefAfterIntro = false;
       const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h5);
@@ -5764,7 +5797,9 @@ if (expectBriefAfterIntro){
         html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
       }
 
-      inPsalm = /^Responzóriový\s+žalm\b/i.test(h);
+      const nextIsPsalm = /^Responzóriový\s+žalm\b/i.test(h);
+      if (inPsalm && !nextIsPsalm) html += '<div class="kbs-gap"></div>';
+      inPsalm = nextIsPsalm;
       afterVerse = /(\bverš\b|aklamáci|aleluja)/i.test(h);
       lastH4 = h;
       expectBriefAfterIntro = false;
@@ -5789,20 +5824,64 @@ const tLineNorm = tLine
   .replace(/[*_]+$/g,'')
   .trim();
 
+// Aleluja / pôstne zvolania pred evanjeliom (väčšie ako nadpisy, verš pod tým)
+const isAcclLine = /^Aleluja\b/i.test(tLineNorm) || /^Chvála\s+ti,\s*Kriste,?\s*Kráľ\s+večnej\s+slávy\.?$/i.test(tLineNorm) || /^Sláva\s+ti\s+a\s+chvála,\s*Ježišu\s+Kriste\.?$/i.test(tLineNorm) || /^Sláva\s+ti,\s*Kriste,\s*ty\s+Božie\s+slovo\.?$/i.test(tLineNorm);
+
+if (isAcclLine){
+  if (inPsalm){
+    html += '<div class="kbs-gap"></div>';
+    inPsalm = false;
+  }
+
+  let title = tLine.trim();
+  let inlineVerse = '';
+
+  if (/^Aleluja\b/i.test(tLineNorm)){
+    // Normalizuj "Aleluja, aleluja..." -> len "Aleluja"
+    const m = tLineNorm.match(/^Aleluja(?:[\s,!.]+Aleluja){0,3}[\s,!.]*(.*)$/i);
+    title = 'Aleluja';
+    inlineVerse = (m && m[1]) ? String(m[1]).trim() : '';
+  }
+
+  html += '<div class="kbs-accl-title">'+esc(title)+'</div>';
+  afterVerse = true;
+
+  if (inlineVerse){
+    html += '<div class="kbs-accl-verse">'+esc(inlineVerse)+'</div>';
+  }else{
+    expectAcclVerseNext = true;
+  }
+  continue;
+}
+
 const isReadingIntro = /^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.test(tLineNorm);
 const isPsalmIntro = /^Responzóriový\s+žalm\b/i.test(tLineNorm);
 const isGospelIntro = /^Evanjelium\b/i.test(tLineNorm) || /^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i.test(tLineNorm);
 
 if (isReadingIntro || isPsalmIntro || isGospelIntro){
+  // if we are leaving psalm section, add a single blank line after the psalm
+  if (inPsalm && !isPsalmIntro){
+    html += '<div class="kbs-gap"></div>';
+  }
+
   // if gospel intro comes right after aleluja/verse, add extra spacing
   if (isGospelIntro && afterVerse){
     html += '<div class="kbs-gap"></div><div class="kbs-gap"></div>';
     afterVerse = false;
   }
+
   html += '<div class="kbs-lit-intro">'+esc(tLine)+'</div>';
   expectBriefAfterIntro = (isReadingIntro || isGospelIntro);
   // psalm section starts here even when it's not formatted as ####
   inPsalm = isPsalmIntro;
+
+  // If the refrain line came BEFORE the psalm intro, render it now (under the intro)
+  if (isPsalmIntro && pendingPsalmRefrain){
+    const tPsalm = pendingPsalmRefrain.trim();
+    const rest = tPsalm.replace(/^R\s*[\.:]/i,'').trimStart();
+    html += '<div class="kbs-psalm-line kbs-psalm-refrain-top"><span class="kbs-r">R.</span>' + (rest ? (' ' + esc(rest)) : '') + '</div>';
+    pendingPsalmRefrain = null;
+  }
   continue;
 }
 
@@ -5832,6 +5911,8 @@ if (!inPsalm && (/^(Začiatok|Koniec)\b/i.test(tLineNorm))){
       const mEndR = tPsalm.match(/^(.*?)(?:\s+)R\.\s*$/);
       if (mEndR && mEndR[1] && mEndR[1].trim()){
         html += '<div class="kbs-psalm-line">'+esc(mEndR[1].trimEnd())+' <span class="kbs-r">R.</span></div>';
+        // one blank line between stanzas
+        html += '<div class="kbs-psalm-stanza-gap"></div>';
         continue;
       }
 
