@@ -279,8 +279,8 @@ function syncRetryNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v114';
-const APP_CACHE_NAME = 'spevnik-v114';
+const APP_BUILD = 'v115';
+const APP_CACHE_NAME = 'spevnik-v115';
 
 function _buildNum(){
   // APP_BUILD is like "v114"
@@ -5714,6 +5714,7 @@ function _litKbsLikeHtmlFromText(rawText){
 
   let html = '<div class="kbs-like">';
   let inPsalm = false;
+  let inSeq = false;
   let lastH4 = '';
   let afterVerse = false;
   let expectBriefAfterIntro = false;
@@ -5737,6 +5738,11 @@ function _litKbsLikeHtmlFromText(rawText){
     if (!line.trim()){
       // inside psalm we ignore empty lines to avoid huge gaps between verses
       if (inPsalm) continue;
+      // inside sequence, keep only a small stanza separator
+      if (inSeq){
+        html += '<div class="kbs-seq-stanza-gap"></div>';
+        continue;
+      }
       html += '<div class="kbs-gap"></div>';
       continue;
     }
@@ -5782,8 +5788,9 @@ if (expectAcclVerseNext){
       }
       if (inPsalm) html += '<div class="kbs-gap"></div>';
       inPsalm = false;
+      if (inSeq){ html += '<div class=\"kbs-gap\"></div>'; inSeq = false; }
       expectBriefAfterIntro = false;
-      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h5);
+      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Sekvencia\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h5);
       html += '<div class="kbs-h5'+(isLitTitle?' kbs-lit-title':'')+'">'+esc(h5)+'</div>';
       continue;
     }
@@ -5799,12 +5806,13 @@ if (expectAcclVerseNext){
 
       const nextIsPsalm = /^Responzóriový\s+žalm\b/i.test(h);
       if (inPsalm && !nextIsPsalm) html += '<div class="kbs-gap"></div>';
+      if (inSeq){ html += '<div class=\"kbs-gap\"></div>'; inSeq = false; }
       inPsalm = nextIsPsalm;
       afterVerse = /(\bverš\b|aklamáci|aleluja)/i.test(h);
       lastH4 = h;
       expectBriefAfterIntro = false;
 
-      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h);
+      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Sekvencia\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h);
       html += '<div class="kbs-h4'+(isLitTitle?' kbs-lit-title':'')+'">'+esc(h)+'</div>';
       continue;
     }
@@ -5825,22 +5833,53 @@ const tLineNorm = tLine
   .trim();
 
 // Aleluja / pôstne zvolania pred evanjeliom (väčšie ako nadpisy, verš pod tým)
-const isAcclLine = /^Aleluja\b/i.test(tLineNorm) || /^Chvála\s+ti,\s*Kriste,?\s*Kráľ\s+večnej\s+slávy\.?$/i.test(tLineNorm) || /^Sláva\s+ti\s+a\s+chvála,\s*Ježišu\s+Kriste\.?$/i.test(tLineNorm) || /^Sláva\s+ti,\s*Kriste,\s*ty\s+Božie\s+slovo\.?$/i.test(tLineNorm);
+const ACCL_PHRASES = [
+  'Chvála ti, Kriste, Kráľ večnej slávy',
+  'Sláva ti a chvála, Ježišu Kriste',
+  'Sláva ti, Kriste, ty Božie slovo'
+];
+
+let acclTitle = '';
+let acclInlineVerse = '';
+
+// detect Lenten acclamation even when the verse is on the same line
+for (const ph of ACCL_PHRASES){
+  const phL = ph.toLowerCase();
+  const tl = tLineNorm.toLowerCase();
+  if (tl.startsWith(phL)){
+    acclTitle = ph + '.';
+    let rest = tLineNorm.slice(ph.length);
+    // strip punctuation right after the acclamation
+    rest = rest.replace(/^\s*[\.!;:—–-]*\s*/, '');
+    acclInlineVerse = rest.trim();
+    break;
+  }
+}
+
+const isAcclLine = /^Aleluja\b/i.test(tLineNorm) || !!acclTitle;
 
 if (isAcclLine){
   if (inPsalm){
     html += '<div class="kbs-gap"></div>';
     inPsalm = false;
   }
+  if (inSeq){
+    html += '<div class="kbs-gap"></div>';
+    inSeq = false;
+  }
 
   let title = tLine.trim();
   let inlineVerse = '';
 
   if (/^Aleluja\b/i.test(tLineNorm)){
-    // Normalizuj "Aleluja, aleluja..." -> len "Aleluja"
+    // Normalizuj "Aleluja, aleluja..." -> len "Aleluja" (verš môže byť na tom istom riadku)
     const m = tLineNorm.match(/^Aleluja(?:[\s,!.]+Aleluja){0,3}[\s,!.]*(.*)$/i);
     title = 'Aleluja';
     inlineVerse = (m && m[1]) ? String(m[1]).trim() : '';
+  }else{
+    // pôstne zvolanie
+    title = acclTitle || title;
+    inlineVerse = acclInlineVerse || '';
   }
 
   html += '<div class="kbs-accl-title">'+esc(title)+'</div>';
@@ -5857,11 +5896,18 @@ if (isAcclLine){
 const isReadingIntro = /^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.test(tLineNorm);
 const isPsalmIntro = /^Responzóriový\s+žalm\b/i.test(tLineNorm);
 const isGospelIntro = /^Evanjelium\b/i.test(tLineNorm) || /^Čítanie\s+zo\s+svätého\s+Evanjelia\b/i.test(tLineNorm);
+const isSeqIntro = /^Sekvencia\b/i.test(tLineNorm);
 
-if (isReadingIntro || isPsalmIntro || isGospelIntro){
+if (isReadingIntro || isPsalmIntro || isGospelIntro || isSeqIntro){
   // if we are leaving psalm section, add a single blank line after the psalm
   if (inPsalm && !isPsalmIntro){
     html += '<div class="kbs-gap"></div>';
+  }
+
+  // if we are leaving sequence section, add a single blank line after the sequence
+  if (inSeq && !isSeqIntro){
+    html += '<div class="kbs-gap"></div>';
+    inSeq = false;
   }
 
   // if gospel intro comes right after aleluja/verse, add extra spacing
@@ -5872,8 +5918,9 @@ if (isReadingIntro || isPsalmIntro || isGospelIntro){
 
   html += '<div class="kbs-lit-intro">'+esc(tLine)+'</div>';
   expectBriefAfterIntro = (isReadingIntro || isGospelIntro);
-  // psalm section starts here even when it's not formatted as ####
+  // psalm/sequence sections start here even when not formatted as ####
   inPsalm = isPsalmIntro;
+  inSeq = isSeqIntro;
 
   // If the refrain line came BEFORE the psalm intro, render it now (under the intro)
   if (isPsalmIntro && pendingPsalmRefrain){
@@ -5923,6 +5970,13 @@ if (!inPsalm && (/^(Začiatok|Koniec)\b/i.test(tLineNorm))){
       }
 
       html += '<div class="kbs-psalm-line">'+esc(line)+'</div>';
+      continue;
+    }
+
+    // keep sequence line breaks
+    if (inSeq){
+      const tSeq = String(line||'').trim();
+      html += '<div class="kbs-seq-line">'+esc(tSeq)+'</div>';
       continue;
     }
 

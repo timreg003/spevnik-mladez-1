@@ -1238,11 +1238,20 @@ body.present #presentControls{ display:flex; }
   height: 1em;
 }
 
+.kbs-seq-line{
+  margin: 0;
+  line-height: 1.25;
+}
+
+.kbs-seq-stanza-gap{
+  height: 0.8em;
+}
+
 .kbs-accl-title{
   margin: 10px 0 2px 0;
   font-weight: 900;
   font-style: italic;
-  font-size: 1.38em;
+  font-size: 1.65em;
   color: #ffffff;
 }
 
