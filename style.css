@@ -1184,15 +1184,8 @@ body.present #presentControls{ display:flex; }
   margin: 4px 0;
 }
 .kbs-psalm-line{
-  /* Žalm má byť "hustejší" – bez medzier medzi každým riadkom */
   margin: 0;
   line-height: 1.25;
-}
-
-/* Zvýraznenie prefixu "R." v žalme (refren) */
-.kbs-r{
-  font-weight: 700;
-  font-style: italic;
 }
 .kbs-response{
   margin: 10px 0 8px 0;
@@ -1211,6 +1204,46 @@ body.present #presentControls{ display:flex; }
   height: 1em;
 }
 
+
+
+
+.kbs-r{
+  font-weight: 800;
+  font-style: italic;
+}
+
+.kbs-ref-line{
+  margin: 0;
+  padding: 2px 8px;
+  border-left: 3px solid rgba(77,163,255,0.95);
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  font-weight: 650;
+}
+
+.kbs-lit-intro{
+  margin: 8px 0 4px 0;
+  font-weight: 850;
+  font-style: italic;
+  font-size: 1.18em;
+  color: #ffffff;
+}
+
+.kbs-beginend{
+  margin: 6px 0;
+  font-weight: 850;
+  font-style: italic;
+  font-size: 1.06em;
+  color: rgba(255,255,255,0.92);
+}
+
+.kbs-h4.kbs-lit-title,
+.kbs-h5.kbs-lit-title{
+  font-weight: 850;
+  font-style: italic;
+  font-size: 1.22em;
+  color: #ffffff;
+}
 
 
 /* ===== SONG EDITOR (v94) ===== */

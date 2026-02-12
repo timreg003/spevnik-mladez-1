@@ -279,11 +279,11 @@ function syncRetryNow(){
 
 
 // Build info (for diagnostics)
-const APP_BUILD = 'v111';
-const APP_CACHE_NAME = 'spevnik-v111';
+const APP_BUILD = 'v112';
+const APP_CACHE_NAME = 'spevnik-v112';
 
 function _buildNum(){
-  // APP_BUILD is like "v111"
+  // APP_BUILD is like "v112"
   const m = String(APP_BUILD||'').match(/(\d+)/);
   return m ? m[1] : '0';
 }
@@ -5748,7 +5748,8 @@ if (expectBriefAfterIntro){
       }
       inPsalm = false;
       expectBriefAfterIntro = false;
-      html += '<div class="kbs-h5">'+esc(h5)+'</div>';
+      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h5);
+      html += '<div class="kbs-h5'+(isLitTitle?' kbs-lit-title':'')+'">'+esc(h5)+'</div>';
       continue;
     }
     if (/^#{4}\s+/.test(line)){
@@ -5766,7 +5767,8 @@ if (expectBriefAfterIntro){
       lastH4 = h;
       expectBriefAfterIntro = false;
 
-      html += '<div class="kbs-h4">'+esc(h)+'</div>';
+      const isLitTitle = /^(Čítanie\s+z\b|Čítanie\s+zo\b|Responzóriový\s+žalm\b|Evanjelium\b|Čítanie\s+zo\s+svätého\s+Evanjelia\b)/i.test(h);
+      html += '<div class="kbs-h4'+(isLitTitle?' kbs-lit-title':'')+'">'+esc(h)+'</div>';
       continue;
     }
     // Ak "Evanjelium" príde ako bežný riadok (nie nadpis), vlož medzeru po aleluja/verši
@@ -5784,8 +5786,14 @@ const tLineNorm = tLine
   .replace(/[*_]+$/g,'')
   .trim();
 if (!inPsalm && (/^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.test(tLineNorm))){
-  html += '<div class="kbs-line">'+esc(tLine)+'</div>';
+  html += '<div class="kbs-lit-intro">'+esc(tLine)+'</div>';
   expectBriefAfterIntro = true;
+  continue;
+}
+
+// Begin/End lines (sometimes used for reading/gospel)
+if (!inPsalm && (/^(Začiatok|Koniec)\b/i.test(tLineNorm))){
+  html += '<div class="kbs-beginend">'+esc(tLine)+'</div>';
   continue;
 }
     // responses
@@ -5796,14 +5804,14 @@ if (!inPsalm && (/^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.t
 
     // keep psalm line breaks
     if (inPsalm){
-      // Zvýrazni "R." (refren), aby bol viditeľný aj keď je text refrenu rovnaký.
-      const mR = String(line||'').trim().match(/^R\s*\.?\s*:\s*(.*)$/i);
-      if (mR){
-        const rest = (mR[1] != null) ? String(mR[1]) : '';
-        html += '<div class="kbs-psalm-line"><span class="kbs-r">R.</span>: '+esc(rest)+'</div>';
-      } else {
-        html += '<div class="kbs-psalm-line">'+esc(line)+'</div>';
+      const tPsalm = String(line||'').trim();
+      // Refren lines: "R." / "R:" / "R.:"
+      if (/^R\s*[\.:]/i.test(tPsalm)){
+        const rest = tPsalm.replace(/^R\s*[\.:]/i,'').trimStart();
+        html += '<div class="kbs-psalm-line kbs-ref-line"><span class="kbs-r">R.</span>' + (rest ? (' ' + esc(rest)) : '') + '</div>';
+        continue;
       }
+      html += '<div class="kbs-psalm-line">'+esc(line)+'</div>';
       continue;
     }
 
