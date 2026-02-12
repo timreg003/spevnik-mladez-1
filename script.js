@@ -5796,7 +5796,14 @@ if (!inPsalm && (/^Čítanie\s+z\s+/i.test(tLineNorm) || /^Čítanie\s+zo\s+/i.t
 
     // keep psalm line breaks
     if (inPsalm){
-      html += '<div class="kbs-psalm-line">'+esc(line)+'</div>';
+      // Zvýrazni "R." (refren), aby bol viditeľný aj keď je text refrenu rovnaký.
+      const mR = String(line||'').trim().match(/^R\s*\.?\s*:\s*(.*)$/i);
+      if (mR){
+        const rest = (mR[1] != null) ? String(mR[1]) : '';
+        html += '<div class="kbs-psalm-line"><span class="kbs-r">R.</span>: '+esc(rest)+'</div>';
+      } else {
+        html += '<div class="kbs-psalm-line">'+esc(line)+'</div>';
+      }
       continue;
     }
 
